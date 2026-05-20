@@ -3080,48 +3080,22 @@ rainbowBtn.addEventListener('click', () => {
   if (typeof MX !== 'undefined') MX.track('Booster Used', { kind: 'rainbow' });
 });
 
-// Death-line grace period — during a shake event, suppress game-over
-// even if dolls fly above the line. Set when the shake fires.
-let shakeBoostUntilMs = 0;
-
-function applyShakePulse(hMag, vMag) {
+function doShake() {
+  // Apply a random horizontal kick + small upward bump to every body,
+  // plus jitter so stacks unfuse and resettle. Screen-shake for feel.
   for (const b of world) {
     if (b.merged) continue;
-    // Strong random horizontal kick + meaningful upward toss + spin
-    b.vx += (Math.random() - 0.5) * hMag * 2;
-    b.vy -= Math.random() * vMag + 1.5;
-    b.spin += (Math.random() - 0.5) * 0.20;
-    // Tiny positional jitter helps stuck same-tier dolls separate so
-    // collisions can actually re-fire and trigger merges.
-    b.x += (Math.random() - 0.5) * 4;
-    b.y += (Math.random() - 0.5) * 2;
+    b.vx += (Math.random() - 0.5) * 9;
+    b.vy -= 1.5 + Math.random() * 3;
+    b.spin += (Math.random() - 0.5) * 0.08;
   }
-}
-
-function doShake() {
-  // v0.3.18 — multi-pulse shake. The old single impulse was too gentle to
-  // actually rearrange a settled stack. Now we fire 5 pulses over ~700ms
-  // with diminishing magnitude, plus continuous screen-shake. Same-tier
-  // dolls that get knocked together by the chaos actually merge.
-  shakeBoostUntilMs = performance.now() + 900;
-  // First pulse — biggest, like the player physically tipped the jar
-  applyShakePulse(22, 7);
-  kickShake(26);
-  setTimeout(() => { if (running) { applyShakePulse(18, 5); kickShake(22); } }, 130);
-  setTimeout(() => { if (running) { applyShakePulse(16, 4); kickShake(18); } }, 270);
-  setTimeout(() => { if (running) { applyShakePulse(12, 3); kickShake(14); } }, 420);
-  setTimeout(() => { if (running) { applyShakePulse(8,  2); kickShake(10); } }, 580);
-  // Reset every doll's death-line countdown — grace is also extended via
-  // shakeBoostUntilMs but resetting the per-doll counter prevents a doll
-  // that was ALREADY in the danger zone before the shake from instantly
-  // ending the game when shakeBoostUntilMs elapses.
+  kickShake(16);
+  // Reset every doll's death-line countdown — shake gives you breathing
+  // room (recovery without immediate game-over).
   for (const b of world) b.restingFrames = 0;
-  // Layered audio cue — rolling thunder
-  tone(95,  0.50, 'sawtooth', 0.14);
-  setTimeout(() => tone(140, 0.45, 'sawtooth', 0.12), 140);
-  setTimeout(() => tone(190, 0.40, 'sawtooth', 0.10), 290);
-  setTimeout(() => tone(260, 0.30, 'triangle', 0.10), 450);
-  setTimeout(() => tone(340, 0.20, 'triangle', 0.08), 600);
+  // Audio cue
+  tone(110, 0.18, 'sawtooth', 0.12);
+  setTimeout(() => tone(220, 0.10, 'triangle', 0.10), 80);
 }
 
 // Hammer mode hits — intercept canvas pointerdown when active.
@@ -3316,15 +3290,6 @@ function playComboSound(combo) {
    [JS-10] Game over detection
    ========================================================= */
 function checkGameOver() {
-  // Grace period: during a shake event, dolls are flying everywhere and
-  // some will momentarily cross the death line. Suppress game-over for
-  // ~900ms after a shake fires so the player isn't punished for using
-  // the booster. Per-doll restingFrames are also zeroed in doShake().
-  if (performance.now() < shakeBoostUntilMs) {
-    dangerLevel = 0;
-    for (const b of world) b.restingFrames = 0;
-    return;
-  }
   // Death rule: any doll whose "upper-body" point sits above the death line
   // for DEATH_FRAMES consecutive frames triggers game over.
   //
