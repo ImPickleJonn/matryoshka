@@ -13,6 +13,30 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const TELEGRAM_API = BOT_TOKEN ? `https://api.telegram.org/bot${BOT_TOKEN}` : null;
+
+// Purchase notification → shared pickle-notif-bot. No-op unless both env vars
+// are set, so this is safe to deploy before the notif bot exists.
+const NOTIF_BOT_URL = process.env.NOTIF_BOT_URL || '';
+const NOTIF_SECRET  = process.env.NOTIF_SECRET || '';
+const NOTIF_GAME_ID = 'matryoshka';
+function notifyPurchase(info) {
+  if (!NOTIF_BOT_URL || !NOTIF_SECRET) return;
+  try {
+    fetch(NOTIF_BOT_URL.replace(/\/+$/, '') + '/api/purchase', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-notif-key': NOTIF_SECRET },
+      body: JSON.stringify({
+        game: NOTIF_GAME_ID,
+        sku: info.sku,
+        stars: info.stars,
+        userId: info.userId,
+        username: info.username,
+        ts: Date.now(),
+      }),
+    }).catch(() => {});
+  } catch (_e) {}
+}
+
 const WEBHOOK_SECRET = BOT_TOKEN
   ? crypto.createHash('sha256').update(BOT_TOKEN).digest('hex').slice(0, 32)
   : null;
@@ -681,7 +705,15 @@ app.post('/api/telegram-webhook', async (req, res) => {
       const sp = update.message.successful_payment;
       try {
         const payload = JSON.parse(sp.invoice_payload);
-        if (payload && payload.uid && SKUS[payload.sku]) pushPending(payload.uid, payload.sku);
+        if (payload && payload.uid && SKUS[payload.sku]) {
+          pushPending(payload.uid, payload.sku);
+          notifyPurchase({
+            sku: payload.sku,
+            stars: sp.total_amount || (SKUS[payload.sku] && SKUS[payload.sku].price) || 0,
+            userId: payload.uid,
+            username: update.message.from && update.message.from.username,
+          });
+        }
       } catch (e) {}
     } else if (update.message && update.message.text === '/start') {
       const m = update.message;
