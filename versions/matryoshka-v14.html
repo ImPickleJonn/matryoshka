@@ -1899,11 +1899,6 @@ function ensureHiDPI(cnv, cssW, cssH) {
 let shakeAmp = 0;
 function kickShake(a) { shakeAmp = Math.min(28, Math.max(shakeAmp, a)); }
 
-// Highest "above-the-line" timer in the world, normalized 0..1. Used to
-// pulse the death line so the player can see danger building before the
-// game actually ends.
-let dangerLevel = 0;
-
 // Combo state — not persisted across runs; resets on newGame.
 let comboCount = 0;
 let lastMergeAtMs = 0;
@@ -1961,13 +1956,10 @@ function drawJar() {
   ctx.fillStyle = 'rgba(0,0,0,0.04)';
   ctx.fillRect(JAR.left, JAR.bottom - 18, JAR.right - JAR.left, 18);
 
-  // Death line — pulses brighter and thicker as danger builds, so the
-  // player sees the threat before the 1.6s game-over timer fires.
+  // Death line (subtle dashed)
   ctx.save();
-  const flash = dangerLevel > 0.05 ? (0.7 + 0.3 * Math.sin(performance.now() / 80)) : 1;
-  const dlAlpha = (0.55 + dangerLevel * 0.4) * flash;
-  ctx.strokeStyle = 'rgba(255,84,112,' + dlAlpha.toFixed(3) + ')';
-  ctx.lineWidth = 1.5 + dangerLevel * 2;
+  ctx.strokeStyle = 'rgba(255,84,112,0.55)';
+  ctx.lineWidth = 1.5;
   ctx.setLineDash([6, 4]);
   ctx.beginPath();
   ctx.moveTo(JAR.left + 8, JAR.deathLineY);
@@ -2554,36 +2546,20 @@ function playComboSound(combo) {
    [JS-10] Game over detection
    ========================================================= */
 function checkGameOver() {
-  // Death rule: any doll whose "upper-body" point sits above the death line
-  // for DEATH_FRAMES consecutive frames triggers game over.
-  //
-  // Earlier versions required the doll to ALSO be "resting" (velocity below
-  // a tight threshold) before counting frames. That was wrong — stacked
-  // dolls are constantly jittering from gravity + body-body collisions, so
-  // the resting check almost never passed and the counter never accumulated.
-  // Now we only check geometry. When a doll bobs out of the danger zone, we
-  // decay the counter (rather than hard-reset) so a doll teetering in and
-  // out can't game the system, but a clear drop below the line still
-  // recovers within ~30 frames.
-  let maxFrames = 0;
   for (const b of world) {
     if (b.merged) continue;
-    // Trigger when ~20% of the body sits above the death line.
-    const isAboveLine = (b.y - b.r * 0.4) < JAR.deathLineY;
-    if (isAboveLine) {
+    const isResting = Math.abs(b.vy) < 0.35 && Math.abs(b.vx) < 0.6;
+    const isAboveLine = b.y - b.r * 0.4 < JAR.deathLineY;
+    if (isResting && isAboveLine) {
       b.restingFrames++;
       if (b.restingFrames > DEATH_FRAMES) {
-        dangerLevel = 1;
         endGame();
         return;
       }
     } else {
-      b.restingFrames = Math.max(0, b.restingFrames - 2);
+      b.restingFrames = 0;
     }
-    if (b.restingFrames > maxFrames) maxFrames = b.restingFrames;
   }
-  // Feed the visual pulse on the death line — exposed as 0..1.
-  dangerLevel = Math.min(1, maxFrames / DEATH_FRAMES);
 }
 
 function endGame() {
