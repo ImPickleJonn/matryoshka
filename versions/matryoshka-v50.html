@@ -1168,12 +1168,7 @@ const MX = {
     let encoded;
     try { encoded = btoa(unescape(encodeURIComponent(payload))); }
     catch (e) { encoded = btoa(payload); }
-    // ip=1 tells Mixpanel to resolve geo (country / region / city) from
-    // the request's source IP. Since this fetch goes DIRECT from the
-    // player's browser to api.mixpanel.com (not proxied via our server),
-    // the source IP IS the player. Without &ip=1 Mixpanel logs the event
-    // but leaves all geo fields empty — which is exactly the bug we hit.
-    const full = url + '?data=' + encodeURIComponent(encoded) + '&ip=1&verbose=0';
+    const full = url + '?data=' + encodeURIComponent(encoded);
     // sendBeacon survives page unload; falls back to keepalive fetch.
     try {
       if (navigator.sendBeacon) {
