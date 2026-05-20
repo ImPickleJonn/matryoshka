@@ -185,11 +185,6 @@
      [05b] Mascot — corner reactive doll
      ========================================================= */
   .mascot-wrap {
-    /* Hidden in v0.3.2 — the Grandma mascot uses the same matryoshka art
-       as playable dolls, so players were trying to merge with it. Will
-       revive later as a visually-distinct character (samovar, cat, etc.)
-       that's clearly a spectator, not a piece. */
-    display: none !important;
     position: absolute;
     z-index: 16;
     pointer-events: none;
@@ -222,14 +217,8 @@
      [06] Tiers progress dock (bottom of jar)
      ========================================================= */
   .tiers-dock {
-    /* Hidden in v0.3.2 — players didn't recognize the dots as a tier-
-       progression indicator. The next-doll pill + the actual dolls in the
-       jar already convey progress more naturally. Keeping the markup and
-       JS in place so we can revive it as a Stats-panel widget later. */
-    display: none !important;
     position: absolute; z-index: 18;
-    /* (original was display: flex; gap: 3px) */
-    gap: 3px;
+    display: flex; gap: 3px;
     padding: 5px 8px;
     background: rgba(0,0,0,0.18);
     border-radius: 12px;
@@ -1687,12 +1676,8 @@ class Body {
     this.vy = 0;
     this.tier = tier;
     this.r = TIER_RADII[tier];
-    // Spin & rotation: zeroed in v0.3.2. Suika-style merge games keep dolls
-    // upright — letting them rotate freely felt chaotic ("spinning like
-    // crazy") and made the matryoshkas look ungrounded. Tiny random angle
-    // (±0.02 rad, ~1°) gives the stack a hand-placed look without movement.
-    this.angle = (Math.random() - 0.5) * 0.04;
-    this.spin = 0;
+    this.angle = (Math.random() - 0.5) * 0.3;
+    this.spin = (Math.random() - 0.5) * 0.04;
     this.merged = false;
     this.bornAt = performance.now();
     this.restingFrames = 0;
@@ -1761,18 +1746,20 @@ function physicsStep() {
       if (b.vx < -MAX_VEL) b.vx = -MAX_VEL;
       b.x += b.vx * substep;
       b.y += b.vy * substep;
-      // angle and spin intentionally not integrated (zeroed v0.3.2)
+      b.angle += b.spin * substep;
+      b.spin *= 0.985;
       if (b.scale < 1) b.scale = Math.min(1, b.scale + 0.06 * substep);
     }
-    // Walls + floor — no spin imparted (zeroed v0.3.2)
+    // Walls + floor
     for (const b of world) {
       if (b.merged) continue;
-      if (b.x - b.r < JAR.left)  { b.x = JAR.left + b.r; b.vx = Math.abs(b.vx) * WALL_RESTITUTION; }
-      if (b.x + b.r > JAR.right) { b.x = JAR.right - b.r; b.vx = -Math.abs(b.vx) * WALL_RESTITUTION; }
+      if (b.x - b.r < JAR.left)  { b.x = JAR.left + b.r; b.vx = Math.abs(b.vx) * WALL_RESTITUTION; b.spin += b.vy * 0.001; }
+      if (b.x + b.r > JAR.right) { b.x = JAR.right - b.r; b.vx = -Math.abs(b.vx) * WALL_RESTITUTION; b.spin -= b.vy * 0.001; }
       if (b.y + b.r > JAR.bottom) {
         b.y = JAR.bottom - b.r;
         b.vy = -Math.abs(b.vy) * WALL_RESTITUTION;
         b.vx *= 0.92;
+        b.spin *= 0.85;
       }
     }
     // Body-body collisions (naive O(n²), fine for <80 bodies)
@@ -1803,8 +1790,10 @@ function physicsStep() {
             const ix = j2 * nx, iy = j2 * ny;
             a.vx -= ix; a.vy -= iy;
             c.vx += ix; c.vy += iy;
-            // No spin transfer (zeroed v0.3.2) — kept dolls upright per Suika
-            // reference look.
+            // tiny spin transfer for visual life
+            const tan = -ny * rvx + nx * rvy;
+            a.spin -= tan * 0.0005;
+            c.spin += tan * 0.0005;
           }
           // Merge check — same tier, last substep only (avoid double-merge)
           if (s === PHYS_SUBSTEPS - 1 && a.tier === c.tier && a.tier < TIER_COUNT - 1) {
@@ -1840,7 +1829,7 @@ function physicsStep() {
         nb.vx = mvx * 0.6;
         nb.vy = mvy * 0.6;
         nb.scale = 0.3;
-        // No spin inheritance (zeroed v0.3.2)
+        nb.spin = (a.spin + c.spin) * 0.5;
         world.push(nb);
         // Combo tracking: chained merges within the window multiply score
         const now = performance.now();
