@@ -1429,8 +1429,6 @@ const STRINGS = {
     game_over: 'Game Over', new_high: 'New High Score!',
     you_scored: 'You scored', your_best: 'Your best',
     use_revive: 'Use Revive', use_undo: 'Use Undo (50 💎)',
-    revive_for_stars: 'Revive for {n} ⭐',
-    revive_pending: 'Revive pending — tap again if needed',
     settings: 'Settings', sound_on: 'Sound: ON', sound_off: 'Sound: OFF',
     haptics_on: 'Vibrate: ON', haptics_off: 'Vibrate: OFF',
     skin: 'Skin',
@@ -1504,8 +1502,6 @@ const STRINGS = {
     game_over: 'Конец игры', new_high: 'Новый рекорд!',
     you_scored: 'Твой счёт', your_best: 'Лучший',
     use_revive: 'Возродиться', use_undo: 'Отмена (50 💎)',
-    revive_for_stars: 'Возродиться за {n} ⭐',
-    revive_pending: 'Возрождение в обработке — повтори при необходимости',
     settings: 'Настройки', sound_on: 'Звук: ВКЛ', sound_off: 'Звук: ВЫКЛ',
     haptics_on: 'Вибро: ВКЛ', haptics_off: 'Вибро: ВЫКЛ',
     skin: 'Скин',
@@ -2849,10 +2845,6 @@ let mergeCount = 0;
 let lastTickMs = 0;
 let gameStartedAtMs = performance.now();
 let gameRevived = false;
-// Paid revives within the current run — drives the progressive price
-// (n+1)*25⭐ on the game-over modal. Free inventory revives don't count.
-// Resets on newGame.
-let paidRevivesUsedThisRun = 0;
 
 function addScore(n) {
   score += n;
@@ -3503,125 +3495,29 @@ function endGame() {
 }
 
 function showGameOverModal(wasBest) {
-  const hasFreeRevive = (state.revives || 0) > 0;
-  const canPaidRevive = !!(tg && getInitData());
-  const paidPrice = (paidRevivesUsedThisRun + 1) * 25;
+  const canRevive = (state.revives || 0) > 0;
   const body = document.getElementById('modal-body');
-
-  // Always offer a revive path: free inventory first, then escalating
-  // Stars price (25, 50, 75, …) per paid revive in the current run.
-  let reviveBtn = '';
-  if (hasFreeRevive) {
-    reviveBtn = `<button class="btn revive" id="m-revive-free">🟢 ${t('use_revive')} (${state.revives})</button>`;
-  } else if (canPaidRevive) {
-    const tmpl = t('revive_for_stars') || 'Revive for {n} ⭐';
-    reviveBtn = `<button class="btn revive" id="m-revive-paid">🟢 ${tmpl.replace('{n}', paidPrice)}</button>`;
-  }
-
   body.innerHTML = `
     <h3>${wasBest ? '🎉 ' + t('new_high') : t('game_over')}</h3>
     <div class="big">${score}</div>
     <div class="sub">${t('your_best')}: ${state.best}</div>
     <div class="modal-btns">
-      ${reviveBtn}
+      ${canRevive ? `<button class="btn revive" id="m-revive">🟢 ${t('use_revive')} (${state.revives})</button>` : ''}
       <button class="btn" id="m-newgame">🪆 ${t('play_again')}</button>
       <button class="btn ghost" id="m-share">📤 Share</button>
     </div>
   `;
   document.getElementById('modal-shade').classList.add('show');
-  if (hasFreeRevive) {
-    document.getElementById('m-revive-free').onclick = () => {
+  if (canRevive) {
+    document.getElementById('m-revive').onclick = () => {
       state.revives--;
       save();
       hideModal();
       doRevive();
     };
-  } else if (canPaidRevive) {
-    document.getElementById('m-revive-paid').onclick = () => buyRevive(paidPrice);
   }
   document.getElementById('m-newgame').onclick = () => { hideModal(); newGame(); };
   document.getElementById('m-share').onclick = () => shareScore();
-  // Analytics — track that we OFFERED the revive (impression). Helps
-  // compute the offer→purchase conversion rate in Mixpanel.
-  if (typeof MX !== 'undefined' && MX.ready) {
-    MX.track('Game Over Modal Shown', {
-      score, mode: state.mode || 'endless',
-      has_free_revive: hasFreeRevive,
-      offered_paid_price: hasFreeRevive ? 0 : paidPrice,
-      paid_revives_used_this_run: paidRevivesUsedThisRun,
-    });
-  }
-}
-
-// Paid revive flow — invoice from /api/create-revive-invoice, openInvoice,
-// poll for the instant_revive grant, doRevive on success.
-async function buyRevive(expectedPrice) {
-  const initData = getInitData();
-  if (!initData || !tg) { toast(t('iap_unavailable')); return; }
-  if (typeof MX !== 'undefined' && MX.ready) {
-    MX.track('Revive Buy Tapped', {
-      paid_revives_used_this_run: paidRevivesUsedThisRun,
-      price_stars: expectedPrice,
-    });
-  }
-  try {
-    const r = await fetch('/api/create-revive-invoice', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        initData,
-        revivesUsed: paidRevivesUsedThisRun,
-        admin_test_price: isAdmin && adminTestPrices,
-      }),
-    });
-    const d = await r.json();
-    if (!d.link) { toast(d.error || 'IAP error'); return; }
-    if (typeof MX !== 'undefined' && MX.ready) MX.track('Revive Invoice Opened', { price_stars: d.amount });
-    tg.openInvoice(d.link, async (status) => {
-      if (status === 'paid') {
-        for (let i = 0; i < 8; i++) {
-          await sleep(400);
-          const rr = await fetch('/api/poll-purchases', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ initData }),
-          });
-          const dd = await rr.json();
-          if (dd.purchases && dd.purchases.length) {
-            for (const p of dd.purchases) {
-              if (p.grant && p.grant.instant_revive) {
-                paidRevivesUsedThisRun++;
-                state.totalIapsEver = (state.totalIapsEver || 0) + 1;
-                save();
-                hideModal();
-                setTimeout(() => doRevive(), 80);
-                if (typeof MX !== 'undefined' && MX.ready) {
-                  MX.track('Revive Purchased', {
-                    price_stars: p.grant.paid_stars || d.amount,
-                    paid_revives_used_this_run: paidRevivesUsedThisRun,
-                  });
-                  MX.incrementProfile({
-                    total_iaps_ever: 1,
-                    total_stars_spent: p.grant.paid_stars || d.amount,
-                    total_paid_revives: 1,
-                  });
-                }
-              } else {
-                applyGrant(p.grant);
-              }
-            }
-            return;
-          }
-        }
-        // No grant came through in 8 polls — surface a soft error so
-        // the player knows to retry rather than just sit there.
-        toast(t('revive_pending') || 'Revive pending — tap again if needed');
-      } else if (status === 'failed') {
-        toast('Payment failed');
-        if (typeof MX !== 'undefined' && MX.ready) MX.track('Revive Failed', { price_stars: d.amount });
-      } else if (status === 'cancelled') {
-        if (typeof MX !== 'undefined' && MX.ready) MX.track('Revive Cancelled', { price_stars: d.amount });
-      }
-    });
-  } catch (e) { toast('Network error'); }
 }
 
 function doRevive() {
@@ -3659,7 +3555,6 @@ function newGame() {
   }
   gameStartedAtMs = performance.now();
   gameRevived = false;
-  paidRevivesUsedThisRun = 0;
   world.length = 0;
   particles.length = 0;
   floats.length = 0;

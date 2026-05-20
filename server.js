@@ -564,6 +564,43 @@ app.post('/api/create-invoice', async (req, res) => {
   } catch (e) { res.status(500).json({ error: String(e && e.message || e) }); }
 });
 
+// Progressive-priced one-shot revive invoice. Used by the game-over
+// modal when the player is out of inventory revives. Price escalates
+// 25, 50, 75, 100... per paid revive within the current run (the
+// counter resets on newGame client-side; the server just takes the
+// `revivesUsed` count and computes price as (n+1)*25, capped to
+// keep accidental high-N requests sane).
+app.post('/api/create-revive-invoice', async (req, res) => {
+  if (!BOT_TOKEN) return res.status(500).json({ error: 'BOT_TOKEN not set' });
+  const { initData, revivesUsed, admin_test_price } = req.body || {};
+  const user = validateInitData(initData);
+  if (!user) return res.status(401).json({ error: 'invalid initData' });
+  const n = Math.max(0, Math.min(20, parseInt(revivesUsed, 10) || 0));
+  const realAmount = (n + 1) * 25;
+  const useAdminPrice = !!admin_test_price && isAdmin(user.id);
+  const amount = useAdminPrice ? 1 : realAmount;
+  const title = useAdminPrice ? '[ADMIN 1⭐] Revive' : `Revive #${n + 1}`;
+  const description = 'Continue your run — clear the top 3 dolls and keep playing.';
+  const payload = JSON.stringify({
+    uid: user.id, sku: 'revive_oneshot',
+    revivesUsed: n, real_price: realAmount, ts: Date.now(),
+    admin: useAdminPrice,
+  });
+  try {
+    const r = await fetch(`${TELEGRAM_API}/createInvoiceLink`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title, description, payload,
+        provider_token: '', currency: 'XTR',
+        prices: [{ label: title, amount }],
+      }),
+    });
+    const data = await r.json();
+    if (!data.ok) return res.status(500).json({ error: data.description || 'telegram api failed' });
+    res.json({ link: data.result, amount, real_amount: realAmount });
+  } catch (e) { res.status(500).json({ error: String(e && e.message || e) }); }
+});
+
 app.post('/api/heartbeat', (req, res) => {
   const { initData, lang, streak, streakRiskAt } = req.body || {};
   const user = validateInitData(initData);
@@ -929,14 +966,35 @@ app.post('/api/telegram-webhook', async (req, res) => {
       const sp = update.message.successful_payment;
       try {
         const payload = JSON.parse(sp.invoice_payload);
-        if (payload && payload.uid && SKUS[payload.sku]) {
-          pushPending(payload.uid, payload.sku);
-          notifyPurchase({
-            sku: payload.sku,
-            stars: sp.total_amount || (SKUS[payload.sku] && SKUS[payload.sku].price) || 0,
-            userId: payload.uid,
-            username: update.message.from && update.message.from.username,
-          });
+        if (payload && payload.uid) {
+          if (payload.sku === 'revive_oneshot') {
+            // Virtual SKU — push a manual grant. Client checks the
+            // instant_revive flag and calls doRevive() directly so
+            // the player gets revived in the same modal session.
+            const arr = pendingByUser.get(payload.uid) || [];
+            arr.push({
+              sku: 'revive_oneshot',
+              grant: { instant_revive: true, paid_stars: sp.total_amount || 0 },
+              ts: Date.now(),
+            });
+            pendingByUser.set(payload.uid, arr);
+            try {
+              notifyPurchase({
+                sku: 'revive_oneshot',
+                stars: sp.total_amount || 0,
+                userId: payload.uid,
+                username: update.message.from && update.message.from.username,
+              });
+            } catch (e) {}
+          } else if (SKUS[payload.sku]) {
+            pushPending(payload.uid, payload.sku);
+            notifyPurchase({
+              sku: payload.sku,
+              stars: sp.total_amount || (SKUS[payload.sku] && SKUS[payload.sku].price) || 0,
+              userId: payload.uid,
+              username: update.message.from && update.message.from.username,
+            });
+          }
         }
       } catch (e) {}
     } else if (update.message && update.message.text === '/start') {
