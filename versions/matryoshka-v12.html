@@ -149,11 +149,7 @@
   #canvas-wrap {
     position: absolute;
     top: calc(var(--tg-safe-top) + 132px);
-    /* CSS absolute positioning ignores the parent's padding — so we can't
-       rely on #app's padding-bottom to push us above the bottom tabs. We
-       explicitly subtract the tab height + safe-area-bottom here. */
-    bottom: calc(var(--tg-safe-bottom) + var(--tab-h));
-    left: 0; right: 0;
+    bottom: 0; left: 0; right: 0;
     display: flex; justify-content: center; align-items: flex-start;
   }
   #game {
@@ -1877,25 +1873,6 @@ const ctx = canvas.getContext('2d');
 const nextCanvas = document.getElementById('next-canvas');
 const nextCtx = nextCanvas.getContext('2d');
 
-// HiDPI helper: bumps the canvas internal buffer to (cssW × dpr, cssH × dpr)
-// and applies a setTransform so all drawing code still uses LOGICAL coords
-// (cssW × cssH). Without this, the canvas would be CSS-stretched on 3× DPR
-// Android phones and every doll would look pixelated.
-function ensureHiDPI(cnv, cssW, cssH) {
-  const dpr = Math.min(2.5, window.devicePixelRatio || 1);
-  const pw = Math.round(cssW * dpr);
-  const ph = Math.round(cssH * dpr);
-  if (cnv.width !== pw || cnv.height !== ph) {
-    cnv.style.width = cssW + 'px';
-    cnv.style.height = cssH + 'px';
-    cnv.width = pw;
-    cnv.height = ph;
-  }
-  const c = cnv.getContext('2d');
-  c.setTransform(pw / cssW, 0, 0, ph / cssH, 0, 0);
-  return c;
-}
-
 let shakeAmp = 0;
 function kickShake(a) { shakeAmp = Math.min(28, Math.max(shakeAmp, a)); }
 
@@ -2200,10 +2177,8 @@ function addScore(n) {
 }
 
 function render() {
-  // Re-apply the logical→physical scale every frame. Cheap insurance in
-  // case anything in the call chain stomped the transform.
-  ctx.setTransform(canvas.width / 360, 0, 0, canvas.height / 540, 0, 0);
-  ctx.clearRect(0, 0, 360, 540);   // clear in LOGICAL coords
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
 
   // Shake offset
   let ox = 0, oy = 0;
@@ -2288,9 +2263,7 @@ function onPointer(e) {
   if (!carrier) return;
   if (performance.now() < carrierLockedUntil) return;
   const rect = canvas.getBoundingClientRect();
-  // Map screen pixels → logical 360-wide coords (NOT to the physical buffer
-  // size, which is now DPR-scaled).
-  const xRaw = (e.clientX - rect.left) * (360 / rect.width);
+  const xRaw = (e.clientX - rect.left) * (canvas.width / rect.width);
   carrier.x = clamp(xRaw, JAR.left + carrier.r + 4, JAR.right - carrier.r - 4);
   lastDropX = carrier.x;
 }
@@ -2395,11 +2368,10 @@ canvas.addEventListener('touchstart', e => e.preventDefault(), { passive: false 
 canvas.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
 
 function renderNext() {
-  const cssW = 44, cssH = 44;
-  const c = ensureHiDPI(nextCanvas, cssW, cssH);
-  c.clearRect(0, 0, cssW, cssH);
-  const r = Math.min(cssW, cssH) * 0.36;
-  drawMatryoshka(c, cssW / 2, cssH / 2 + 2, r, nextTier, 0, 1);
+  const c = nextCtx;
+  c.clearRect(0, 0, nextCanvas.width, nextCanvas.height);
+  const r = Math.min(nextCanvas.width, nextCanvas.height) * 0.36;
+  drawMatryoshka(c, nextCanvas.width / 2, nextCanvas.height / 2 + 2, r, nextTier, 0, 1);
 }
 
 /* =========================================================
@@ -2457,8 +2429,8 @@ function stepMascot() {
 }
 
 function drawMascot() {
-  const W = 68, H = 80;  // logical size
-  const c = ensureHiDPI(mascotCanvas, W, H);
+  const c = mascotCtx;
+  const W = mascotCanvas.width, H = mascotCanvas.height;
   c.clearRect(0, 0, W, H);
   const bob = Math.sin(mascotPhase) * 1.6;
   const squash = mascotSquash;
@@ -3484,15 +3456,10 @@ function fitCanvas() {
   let cssW = targetW;
   let cssH = (cssW * 540) / 360;
   if (cssH > targetH) { cssH = targetH; cssW = (cssH * 360) / 540; }
-  // Apply HiDPI scaling to the game canvas. Internal buffer is sized to
-  // physical pixels (cssW × dpr, cssH × dpr) for crisp rendering on 3×
-  // displays. The LOGICAL coordinate system stays at 360×540 — applied
-  // via setTransform every frame in render().
   canvas.style.width = cssW + 'px';
   canvas.style.height = cssH + 'px';
-  canvas.width = Math.round(cssW * dpr);
-  canvas.height = Math.round(cssH * dpr);
-  ctx.setTransform(canvas.width / 360, 0, 0, canvas.height / 540, 0, 0);
+  canvas.width = 360;
+  canvas.height = 540;
   // Position next-pill at top-right of jar
   const nextPill = document.getElementById('next-pill');
   const dock = document.getElementById('tiers-dock');
@@ -3754,7 +3721,7 @@ function ftueRenderChrome() {
 }
 
 function ftueLoop() {
-  const c = ensureHiDPI(document.getElementById('ftue-canvas'), FTUE_DEMO_W, FTUE_DEMO_H);
+  const c = document.getElementById('ftue-canvas').getContext('2d');
   const elapsed = performance.now() - ftueStepStartMs;
   const step = FTUE_STEPS[ftueIdx];
   if (step && step.draw) step.draw(c, elapsed);
