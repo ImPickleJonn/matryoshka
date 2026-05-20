@@ -243,18 +243,6 @@
     box-shadow: 0 0 0 3px rgba(253,197,0,0.45), 0 3px 6px rgba(118,72,28,0.18);
     animation: booster-pulse 0.9s ease-in-out infinite;
   }
-  /* Rainbow button shimmers regardless of active state — it's special. */
-  .booster-rainbow {
-    background: linear-gradient(135deg, #ff2e63 0%, #ff8c00 25%, #ffd400 50%, #39ff14 70%, #00bbf9 90%, #9b5de5 100%) !important;
-    background-size: 220% 220% !important;
-    border-color: #fff !important;
-    animation: rainbow-shimmer 2.4s linear infinite;
-  }
-  @keyframes rainbow-shimmer {
-    0%   { background-position:   0% 50%; }
-    100% { background-position: 220% 50%; }
-  }
-  .booster-rainbow.disabled { animation: none; opacity: 0.55; }
   @keyframes booster-pulse {
     0%, 100% { box-shadow: 0 0 0 3px rgba(253,197,0,0.45), 0 3px 6px rgba(118,72,28,0.18); }
     50%      { box-shadow: 0 0 0 6px rgba(253,197,0,0.20), 0 3px 6px rgba(118,72,28,0.18); }
@@ -972,8 +960,6 @@
                 aria-label="Hammer — tap a doll to remove it">🔨<span class="count" id="hammer-count">0</span></button>
         <button class="booster-btn" id="btn-shake" title="Shake"
                 aria-label="Shake — jostles all dolls">🌀<span class="count" id="shake-count">0</span></button>
-        <button class="booster-btn booster-rainbow" id="btn-rainbow" title="Rainbow Doll"
-                aria-label="Rainbow Doll — next carrier merges with anything">🌈<span class="count" id="rainbow-count">0</span></button>
       </div>
       <div class="booster-cancel-hint" id="booster-hint" style="display:none">Tap a doll · tap again to cancel</div>
     </div>
@@ -1728,7 +1714,6 @@ const defaultState = () => ({
   shieldDays: 0,
   hammers: 2,                // start every player with 2 freebies
   shakes: 2,
-  rainbows: 1,               // 1 rainbow doll free to try the mechanic
   lastSpinYMD: '',
   spinCount: 0,
   best: 0,
@@ -1950,7 +1935,6 @@ class Body {
     this.bornAt = performance.now();
     this.restingFrames = 0;
     this.scale = 0.05;     // pop-in
-    this.rainbow = false;  // v0.3.15 rainbow wildcard doll
   }
 }
 
@@ -2071,76 +2055,27 @@ function physicsStep() {
             a.spin -= tan * 0.000025;
             c.spin += tan * 0.000025;
           }
-          // Merge check — last substep only (avoid double-merge).
-          // Rainbow wildcards have priority: a rainbow + ANY non-rainbow
-          // produces a tier+1 doll based on the regular doll's tier.
-          // Two rainbows touching trigger a celebratory bonus.
-          if (s === PHYS_SUBSTEPS - 1) {
-            if (a.rainbow && c.rainbow) {
-              mergeQueue.push([a, c, 'rainbow_pair']);
-            } else if (a.rainbow || c.rainbow) {
-              const reg = a.rainbow ? c : a;
-              if (reg.tier < TIER_COUNT - 1) {
-                mergeQueue.push([a, c, 'rainbow_merge', reg.tier]);
-              } else {
-                // Rainbow + max-tier Tsarina = also a celebration
-                mergeQueue.push([a, c, 'rainbow_pair']);
-              }
-            } else if (a.tier === c.tier && a.tier < TIER_COUNT - 1) {
-              mergeQueue.push([a, c]);
-            } else if (a.tier === c.tier && a.tier === TIER_COUNT - 1) {
-              mergeQueue.push([a, c, true]);
-              markAchievementProgress('tsarina_pair');
-            }
+          // Merge check — same tier, last substep only (avoid double-merge)
+          if (s === PHYS_SUBSTEPS - 1 && a.tier === c.tier && a.tier < TIER_COUNT - 1) {
+            mergeQueue.push([a, c]);
+          } else if (s === PHYS_SUBSTEPS - 1 && a.tier === c.tier && a.tier === TIER_COUNT - 1) {
+            // Two Tsarinas — special pop, both removed, big bonus
+            mergeQueue.push([a, c, true]);
+            markAchievementProgress('tsarina_pair');
           }
         }
       }
     }
     // Resolve merges
     for (const m of mergeQueue) {
-      const [a, c, kind, baseTier] = m;
+      const [a, c, top] = m;
       if (a.merged || c.merged) continue;
       a.merged = true; c.merged = true;
       const mx = (a.x + c.x) / 2;
       const my = (a.y + c.y) / 2;
       const mvx = (a.vx + c.vx) / 2;
       const mvy = (a.vy + c.vy) / 2;
-      if (kind === 'rainbow_pair') {
-        // Two rainbows OR rainbow+Tsarina — fireworks, no new body, big score
-        spawnParticles(mx, my, 60, '#fdc500', 1.6);
-        spawnParticles(mx, my, 40, '#f72585', 1.4);
-        spawnParticles(mx, my, 40, '#00f5d4', 1.4);
-        spawnParticles(mx, my, 30, '#39ff14', 1.3);
-        addScore(500);
-        spawnFloatScore(mx, my - 8, '+500 🌈🌈');
-        playMergeSound(11);
-        setTimeout(() => tone(880, 0.18, 'triangle', 0.14), 80);
-        tgHaptic('heavy');
-        kickShake(20);
-      } else if (kind === 'rainbow_merge') {
-        // Rainbow + regular → tier+1 doll spawns with 2× score bonus
-        const newTier = baseTier + 1;
-        const nb = new Body(mx, my, newTier);
-        nb.vx = mvx * 0.4; nb.vy = mvy * 0.4;
-        nb.scale = 0.3;
-        nb.surpriseUntil = performance.now() + 600;
-        world.push(nb);
-        if (newTier > (state.bestTierEver || 0)) state.bestTierEver = newTier;
-        if (newTier > (state.highestTierSeen || 0)) {
-          state.highestTierSeen = newTier;
-          markTierDot(newTier, true);
-        }
-        const gain = Math.round(TIER_SCORES[newTier] * 2);
-        addScore(gain);
-        state.totalMergesEver = (state.totalMergesEver || 0) + 1;
-        spawnParticles(mx, my, 22 + newTier * 2, '#fdc500', 1.3);
-        spawnParticles(mx, my, 16, '#f72585', 1.1);
-        spawnFloatScore(mx, my - 8, '+' + gain + ' 🌈');
-        playMergeSound(newTier + 1);
-        tgHaptic('medium');
-        kickShake(8 + newTier);
-        bounceMascot(6);
-      } else if (kind === true) {
+      if (top) {
         // Tsarina × Tsarina = celebration
         spawnParticles(mx, my, 36, '#fdc500', 1.5);
         spawnParticles(mx, my, 24, '#a51d30', 1.2);
@@ -2353,23 +2288,10 @@ function roundRect(c, x, y, w, h, r) {
 // expressive faces. Carrier preview, next-pill preview, FTUE demos,
 // and share-card render pass null and get the default happy face.
 function drawMatryoshka(c, x, y, r, tier, angle, scale, body) {
-  const basePal = getPalette(tier);
+  const pal = getPalette(tier);
   const now = performance.now();
   const isBlinking = body && now < body.blinkUntil;
   const isSurprised = body && now < body.surpriseUntil;
-  const isRainbow = body && body.rainbow;
-  // Rainbow dolls override the tier-specific scarf/apron/accent colors
-  // with a neutral white-and-ink palette so the cycling rainbow body
-  // stays the visual focus and the face reads cleanly. Crown disabled
-  // for rainbow regardless of underlying tier.
-  const pal = isRainbow ? {
-    body: basePal.body,
-    scarf: '#fff5d2',
-    face: '#ffe6c8',
-    apron: '#fff5d2',
-    accent: '#2b0a10',
-    crown: false,
-  } : basePal;
   c.save();
   c.translate(x, y);
   c.rotate(angle || 0);
@@ -2378,21 +2300,7 @@ function drawMatryoshka(c, x, y, r, tier, angle, scale, body) {
   // Body silhouette (egg-ish: wider at bottom, narrow at top)
   // (No drop shadow — removed in v0.3.1 because stacked dolls had a band of
   // shadows under each one which read as visual noise.)
-  if (isRainbow) {
-    // Rainbow gradient body — cycles around the body angle with time so
-    // the doll visibly shimmers in the jar.
-    const phase = now / 700;
-    const grad = c.createLinearGradient(0, -r, 0, r);
-    const cycle = (offset) => 'hsl(' + (((phase + offset) * 360) % 360) + ', 90%, 62%)';
-    grad.addColorStop(0,    cycle(0.0));
-    grad.addColorStop(0.25, cycle(0.18));
-    grad.addColorStop(0.5,  cycle(0.36));
-    grad.addColorStop(0.75, cycle(0.54));
-    grad.addColorStop(1,    cycle(0.72));
-    c.fillStyle = grad;
-  } else {
-    c.fillStyle = pal.body;
-  }
+  c.fillStyle = pal.body;
   c.beginPath();
   c.ellipse(0, 0, r * 0.95, r, 0, 0, Math.PI * 2);
   c.fill();
@@ -2511,19 +2419,6 @@ function drawMatryoshka(c, x, y, r, tier, angle, scale, body) {
   c.quadraticCurveTo(-r * 0.4, -r * 0.5, 0, -r * 0.45);
   c.quadraticCurveTo(r * 0.4, -r * 0.5, r * 0.95, -r * 0.05);
   c.stroke();
-
-  // Rainbow doll: sparkly stars orbiting the head so it reads as magical
-  if (isRainbow) {
-    const sparkleN = 6;
-    for (let i = 0; i < sparkleN; i++) {
-      const a = (i / sparkleN) * Math.PI * 2 + now / 600;
-      const sx = Math.cos(a) * r * 1.05;
-      const sy = Math.sin(a) * r * 0.55 - r * 0.4;
-      const sz = r * 0.07 * (0.6 + 0.4 * Math.sin(now / 250 + i));
-      c.fillStyle = i % 2 === 0 ? '#fff' : '#fdc500';
-      c.beginPath(); c.arc(sx, sy, Math.max(0.8, sz), 0, Math.PI * 2); c.fill();
-    }
-  }
 
   // Crown for Tsarina
   if (pal.crown) {
@@ -2679,12 +2574,10 @@ function render() {
     drawMatryoshka(ctx, b.x, b.y, b.r, b.tier, b.angle, b.scale, b);
   }
 
-  // Carrier doll preview at top — pass carrier as the `body` arg only
-  // when it's a rainbow so the gradient + sparkles render.
+  // Carrier doll preview at top
   if (carrier) {
     ctx.globalAlpha = 0.86;
-    drawMatryoshka(ctx, carrier.x, carrier.y, carrier.r, carrier.tier, 0, 1,
-      carrier.rainbow ? carrier : null);
+    drawMatryoshka(ctx, carrier.x, carrier.y, carrier.r, carrier.tier, 0, 1);
     ctx.globalAlpha = 1;
     // dotted drop line
     ctx.save();
@@ -2727,18 +2620,14 @@ function gameTick() {
    [JS-08] Drop UX — pointer drag carrier, drop on release
    ========================================================= */
 let nextTier = chooseSpawnTier();
-let pendingRainbow = false;       // when true, next spawned carrier is rainbow
 function spawnCarrier() {
   const tier = nextTier;
   nextTier = chooseSpawnTier();
-  const isRainbow = pendingRainbow;
-  pendingRainbow = false;
-  // Rainbow carrier uses a medium fixed radius (~tier 4) regardless of
-  // the queue tier — keeps it visually distinct and easier to aim with.
-  const r = isRainbow ? TIER_RADII[4] : TIER_RADII[tier];
+  const r = TIER_RADII[tier];
+  // Carrier hovers above jar at y just above top, x = last cursor or center
   const x = clamp(lastDropX || (JAR.left + JAR.right) / 2, JAR.left + r + 4, JAR.right - r - 4);
   const y = Math.max(40, JAR.top - r - 6);
-  carrier = { x, y, r, tier, rainbow: isRainbow };
+  carrier = { x, y, r, tier };
   markTierDot(tier, false);
   renderNext();
 }
@@ -2824,10 +2713,6 @@ function doDrop() {
   const b = new Body(carrier.x, carrier.y, carrier.tier);
   b.scale = 1;
   b.vy = 0;
-  if (carrier.rainbow) {
-    b.rainbow = true;
-    b.r = carrier.r;   // preserve the carrier's display radius for rainbows
-  }
   world.push(b);
   tgHaptic('soft');
   playDropSound();
@@ -2874,25 +2759,19 @@ document.querySelectorAll('.mode-pill').forEach(p => {
 let activeBooster = null;            // 'hammer' | null
 const hammerBtn = document.getElementById('btn-hammer');
 const shakeBtn  = document.getElementById('btn-shake');
-const rainbowBtn = document.getElementById('btn-rainbow');
 const boosterHint = document.getElementById('booster-hint');
 
 function refreshBoosterHUD() {
   const hc = document.getElementById('hammer-count');
   const sc = document.getElementById('shake-count');
-  const rc = document.getElementById('rainbow-count');
   const hams = state.hammers || 0;
   const shks = state.shakes  || 0;
-  const rbs  = state.rainbows || 0;
-  hc.textContent = hams; sc.textContent = shks; rc.textContent = rbs;
+  hc.textContent = hams; sc.textContent = shks;
   hc.classList.toggle('zero', hams <= 0);
   sc.classList.toggle('zero', shks <= 0);
-  rc.classList.toggle('zero', rbs <= 0);
   hammerBtn.classList.toggle('disabled', hams <= 0);
   shakeBtn.classList.toggle('disabled',  shks <= 0);
-  rainbowBtn.classList.toggle('disabled', rbs <= 0 && !pendingRainbow);
   hammerBtn.classList.toggle('active', activeBooster === 'hammer');
-  rainbowBtn.classList.toggle('active', pendingRainbow);
   document.body.classList.toggle('booster-mode-active', activeBooster !== null);
   boosterHint.style.display = activeBooster === 'hammer' ? '' : 'none';
 }
@@ -2922,38 +2801,6 @@ shakeBtn.addEventListener('click', () => {
   doShake();
   save(); refreshBoosterHUD();
   tgHaptic('medium');
-});
-
-rainbowBtn.addEventListener('click', () => {
-  if (!running) return;
-  // Toggle: if already armed, cancel and refund the charge.
-  if (pendingRainbow) {
-    pendingRainbow = false;
-    if (carrier && carrier.rainbow) {
-      carrier.rainbow = false;
-      carrier.r = TIER_RADII[carrier.tier];
-    }
-    refreshBoosterHUD();
-    toast('Rainbow cancelled');
-    return;
-  }
-  if ((state.rainbows || 0) <= 0) {
-    toast('No rainbow dolls — buy in Shop');
-    return;
-  }
-  state.rainbows--;
-  pendingRainbow = true;
-  // Promote the current carrier immediately so player sees the effect now.
-  if (carrier) {
-    carrier.rainbow = true;
-    carrier.r = TIER_RADII[4];
-    // Re-clamp x so the larger doll still fits inside the jar walls
-    carrier.x = clamp(carrier.x, JAR.left + carrier.r + 4, JAR.right - carrier.r - 4);
-    pendingRainbow = false;  // already applied to current carrier
-  }
-  save(); refreshBoosterHUD();
-  tgHaptic('medium');
-  toast('🌈 Rainbow doll armed — drop it on any doll!');
 });
 
 function doShake() {
@@ -3398,10 +3245,8 @@ const SKU_DISPLAY = [
     title_key: 'Hammer ×5', desc: 'Tap any doll to remove it instantly' },
   { id: 'shake_pack',    icon: '🌀', price: 60,
     title_key: 'Shake ×5', desc: 'Jostle the jar to dislodge stuck stacks' },
-  { id: 'rainbow_pack',  icon: '🌈', price: 120,
-    title_key: 'Rainbow Doll ×3', desc: 'Merges with ANY size — instant level-up' },
-  { id: 'booster_bundle',icon: '🎒', price: 299, feature: true,
-    title_key: 'Booster Bundle', desc: '5 hammers + 5 shakes + 2 rainbows + 5 undos + 2 revives' },
+  { id: 'booster_bundle',icon: '🎒', price: 250, feature: true,
+    title_key: 'Booster Bundle', desc: '5 hammers + 5 shakes + 5 undos + 2 revives' },
   { id: 'gems_small',    icon: '💎', price: 99,
     title_key: '500 Gems', desc: 'Small pile of gems' },
   { id: 'gems_big',      icon: '💰', price: 399,
@@ -3486,7 +3331,6 @@ function applyGrant(g) {
   if (g.undos)    state.undos    = (state.undos    || 0) + g.undos;
   if (g.hammers)  state.hammers  = (state.hammers  || 0) + g.hammers;
   if (g.shakes)   state.shakes   = (state.shakes   || 0) + g.shakes;
-  if (g.rainbows) state.rainbows = (state.rainbows || 0) + g.rainbows;
   if (g.shieldDays) state.shieldDays = (state.shieldDays || 0) + g.shieldDays;
   if (g.skins) { state.skins = Array.from(new Set([...(state.skins || []), ...g.skins])); }
   if (g.battlePass) state.battlePassUntil = Date.now() + g.battlePass * 86400000;

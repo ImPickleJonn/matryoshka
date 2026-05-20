@@ -68,7 +68,7 @@ function saveUsers() {
 // so a malicious client can't set fake state.
 const SYNC_FIELDS = [
   'gems', 'revives', 'previews', 'undos', 'shieldDays',
-  'hammers', 'shakes',
+  'hammers', 'shakes', 'rainbows',
   'skins', 'activeSkin',
   'lastSpinYMD', 'spinCount',
   'xp', 'highestTierSeen',
@@ -403,11 +403,16 @@ const SKUS = {
     description: 'Jostle every doll in the jar to dislodge bad stacks.',
     price: 60, priceUsd: '$0.79', grant: { shakes: 5 },
   },
+  rainbow_pack: {
+    id: 'rainbow_pack', title: 'Rainbow Doll · ×3',
+    description: 'A magical doll that merges with ANY size — instant level up.',
+    price: 120, priceUsd: '$1.59', grant: { rainbows: 3 },
+  },
   booster_bundle: {
     id: 'booster_bundle', title: 'Booster Bundle · Best Value',
-    description: '5 hammers + 5 shakes + 5 undos + 2 revives.',
-    price: 250, priceUsd: '$3.29',
-    grant: { hammers: 5, shakes: 5, undos: 5, revives: 2 },
+    description: '5 hammers + 5 shakes + 2 rainbows + 5 undos + 2 revives.',
+    price: 299, priceUsd: '$3.89',
+    grant: { hammers: 5, shakes: 5, rainbows: 2, undos: 5, revives: 2 },
   },
   test_purchase: {
     id: 'test_purchase', title: 'Test Purchase (admin)',
