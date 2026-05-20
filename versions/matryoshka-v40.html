@@ -4098,25 +4098,19 @@ async function generateShareCard(finalScore, bestTier) {
 async function shareScore() {
   const finalScore = score || state.best || 0;
   const text = t('share_text').replace('{score}', finalScore);
-  // v0.3.14: the shared URL now points at a wrapper HTML page
-  // (/share/<id>) that renders the score card as og:image AND ships a
-  // big "🎮 PLAY MATRYOSHKA" button linking to the bot. Previously we
-  // shared the bare .png URL — friends could see the score but had
-  // no clear way to launch the game.
   let shareUrl = window.location.href;
+  // Try to upload a share-card PNG. If it succeeds, share that URL —
+  // Telegram's link preview fetches the image automatically.
   const initData = getInitData();
   if (initData) {
     try {
       const dataUrl = await generateShareCard(finalScore, state.bestTierEver || 0);
       const r = await fetch('/api/share/upload', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initData, dataUrl, score: finalScore }),
+        body: JSON.stringify({ initData, dataUrl }),
       });
       const d = await r.json();
-      // Prefer the wrapper page URL; fall back to the bare image URL
-      // if the server is on an older version that doesn't return one.
-      if (d && d.shareUrl) shareUrl = d.shareUrl;
-      else if (d && d.url) shareUrl = d.url;
+      if (d && d.url) shareUrl = d.url;
     } catch (e) {}
   }
   const tgShare = 'https://t.me/share/url?url=' + encodeURIComponent(shareUrl) + '&text=' + encodeURIComponent(text);

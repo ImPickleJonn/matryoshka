@@ -308,7 +308,8 @@ setInterval(() => {
     const now = Date.now();
     const TTL = 48 * 60 * 60 * 1000;
     for (const f of fs.readdirSync(SHARES_DIR)) {
-      if (!f.endsWith('.png')) continue;
+      // GC both the PNG and the sidecar JSON together once they pass TTL
+      if (!f.endsWith('.png') && !f.endsWith('.json')) continue;
       const p = path.join(SHARES_DIR, f);
       const st = fs.statSync(p);
       if (now - st.mtimeMs > TTL) fs.unlinkSync(p);
@@ -636,7 +637,7 @@ app.post('/api/score/submit', (req, res) => {
 });
 
 app.post('/api/share/upload', (req, res) => {
-  const { initData, dataUrl } = req.body || {};
+  const { initData, dataUrl, score } = req.body || {};
   const user = validateInitData(initData || '');
   if (!user) return res.status(401).json({ error: 'unauthenticated' });
   if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/png;base64,')) {
@@ -648,9 +649,128 @@ app.post('/api/share/upload', (req, res) => {
   const filename = id + '.png';
   try { fs.writeFileSync(path.join(SHARES_DIR, filename), Buffer.from(b64, 'base64')); }
   catch (e) { return res.status(500).json({ error: 'write failed' }); }
+  // Persist score next to image so the share page can read it back.
+  if (typeof score === 'number' && score > 0) {
+    try {
+      fs.writeFileSync(path.join(SHARES_DIR, id + '.json'),
+        JSON.stringify({ score: Math.min(99999999, score), uid: user.id, name: user.first_name || user.username || 'Player', ts: Date.now() }));
+    } catch (e) {}
+  }
   const baseUrl = getPublicUrl();
-  const url = (baseUrl ? baseUrl : '') + '/shares/' + filename;
-  res.json({ url, id });
+  const imageUrl = (baseUrl ? baseUrl : '') + '/shares/' + filename;
+  const shareUrl = (baseUrl ? baseUrl : '') + '/share/' + id;
+  // Backwards compat: keep `url` pointing at the image so older clients still
+  // work; new clients should prefer `shareUrl` (the HTML wrapper page).
+  res.json({ url: imageUrl, shareUrl, id });
+});
+
+// Share landing page — what recipients of a "🪆 I scored X on Matryoshka,
+// beat me 👉" Telegram message see when they tap the link. Renders the
+// score card image as og:image so the in-chat preview is the card itself,
+// then the page body shows a big PLAY button that opens the bot in
+// Telegram. We escape every interpolated value to keep this XSS-safe.
+function escHtml(s) {
+  return String(s).replace(/[&<>"']/g, ch =>
+    ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[ch]));
+}
+app.get('/share/:id', (req, res) => {
+  const id = String(req.params.id || '');
+  if (!/^[a-f0-9]{16}$/.test(id)) return res.status(404).send('Not found');
+  const imgPath = path.join(SHARES_DIR, id + '.png');
+  if (!fs.existsSync(imgPath)) return res.status(404).send('Expired or not found');
+  const baseUrl = getPublicUrl() || '';
+  const imageUrl = baseUrl + '/shares/' + id + '.png';
+  // Pull the player's score + name if we have a sidecar JSON for this id.
+  let score = 0, name = 'A player';
+  try {
+    const meta = JSON.parse(fs.readFileSync(path.join(SHARES_DIR, id + '.json'), 'utf8'));
+    if (meta && typeof meta.score === 'number') score = meta.score;
+    if (meta && typeof meta.name === 'string') name = meta.name;
+  } catch (e) {}
+  // Bot deep link — prefer ?startapp= so the Mini App opens directly. Fall
+  // back to the bare bot URL if BOT_USERNAME hasn't been resolved at boot.
+  const playUrl = BOT_USERNAME
+    ? 'https://t.me/' + BOT_USERNAME + '?startapp=share'
+    : (baseUrl || '/');
+  const title = '🪆 ' + (score > 0
+    ? (escHtml(name) + ' scored ' + score + ' on Matryoshka — beat them!')
+    : 'Matryoshka — drop, merge, reign');
+  const desc = 'Drop nesting dolls. Merge same sizes. Reach the legendary Tsarina.';
+  res.set('Content-Type', 'text/html; charset=utf-8');
+  res.set('Cache-Control', 'public, max-age=600');
+  res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>${escHtml(title)}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#a51d30">
+<meta name="description" content="${escHtml(desc)}">
+<meta property="og:title" content="${escHtml(title)}">
+<meta property="og:description" content="${escHtml(desc)}">
+<meta property="og:image" content="${imageUrl}">
+<meta property="og:image:width" content="800">
+<meta property="og:image:height" content="800">
+<meta property="og:url" content="${baseUrl}/share/${id}">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="${imageUrl}">
+<style>
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0;padding:0;min-height:100vh}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,system-ui,"SF Pro Display","Segoe UI",sans-serif;
+    color:#fff;
+    background:radial-gradient(ellipse at top,#d12a44 0%,#a01a30 55%,#6f0f1f 100%);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:24px 18px;text-align:center;
+  }
+  .card{
+    background:rgba(0,0,0,0.18);
+    border:1.5px solid rgba(255,213,122,0.45);
+    border-radius:22px;
+    padding:22px 18px 18px;
+    max-width:380px;width:100%;
+    box-shadow:0 10px 32px rgba(0,0,0,0.4);
+  }
+  .logo{font-size:72px;line-height:1;margin-bottom:4px;
+    filter:drop-shadow(0 6px 12px rgba(0,0,0,0.35));
+    animation:bob 1.8s ease-in-out infinite}
+  @keyframes bob{
+    0%,100%{transform:translateY(0) rotate(-3deg)}
+    50%{transform:translateY(-8px) rotate(3deg)}
+  }
+  h1{font-size:24px;margin:0 0 4px;letter-spacing:1px;font-weight:800}
+  .sub{color:#ffe6c2;font-size:13px;margin:0 0 16px;letter-spacing:1px}
+  img.card-img{max-width:100%;width:100%;border-radius:14px;display:block;
+    box-shadow:0 6px 18px rgba(0,0,0,0.35);margin-bottom:18px}
+  .score-line{font-size:16px;color:#ffe6c2;font-weight:700;margin:0 0 14px}
+  .score-line b{color:#fff;font-size:20px}
+  .play{
+    display:inline-flex;align-items:center;justify-content:center;gap:6px;
+    width:100%;padding:14px 22px;
+    background:linear-gradient(180deg,#ffd84d 0%,#f5b300 100%);
+    color:#2b0a10;font-size:17px;font-weight:800;letter-spacing:0.5px;
+    text-decoration:none;border-radius:14px;
+    box-shadow:0 4px 12px rgba(0,0,0,0.3);
+    -webkit-tap-highlight-color:transparent;
+  }
+  .play:active{transform:translateY(1px)}
+  .footnote{margin-top:14px;font-size:11px;color:rgba(255,230,194,0.6);letter-spacing:0.5px}
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">🪆</div>
+    <h1>MATRYOSHKA</h1>
+    <div class="sub">DROP · MERGE · REIGN</div>
+    <img class="card-img" src="${imageUrl}" alt="Score card">
+    ${score > 0 ? `<p class="score-line">${escHtml(name)} scored <b>${score}</b>. Can you beat them?</p>` : ''}
+    <a href="${playUrl}" class="play">🎮 PLAY MATRYOSHKA</a>
+    <div class="footnote">Free · Stars-only IAP · No ads</div>
+  </div>
+</body>
+</html>`);
 });
 
 app.get('/api/tournament/current', (req, res) => {
