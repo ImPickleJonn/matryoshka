@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Persistent data (leaderboard, users, tournament, share PNGs, etc.)
+# Render mounts a Disk at /data; local dev uses ./data/. Either way,
+# the contents are runtime state — not source.
+data/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Local env
+.env
+.env.local
+
+# Logs
+*.log
+npm-debug.log*

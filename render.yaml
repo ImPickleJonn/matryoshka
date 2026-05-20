@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: matryoshka
+    env: node
+    plan: starter
+    autoDeploy: true
+    buildCommand: npm install
+    startCommand: node server.js
+    disk:
+      name: matryoshka-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: DATA_DIR
+        value: /data
+      - key: BOT_TOKEN
+        sync: false
+      - key: PUBLIC_DOMAIN
+        fromService:
+          type: web
+          name: matryoshka
+          property: host
+      - key: TELEGRAM_ADMIN_IDS
+        value: "23040617"

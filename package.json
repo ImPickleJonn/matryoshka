@@ -1,0 +1,16 @@
+{
+  "name": "matryoshka",
+  "version": "0.3.0",
+  "description": "Matryoshka — drop-and-merge nesting-doll Telegram Mini App. Stars IAP only, no ads.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.21.0"
+  }
+}

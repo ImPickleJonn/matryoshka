@@ -1,0 +1,3822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+<meta name="theme-color" content="#a51d30" />
+<title>Matryoshka · Drop & Merge</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  /* =========================================================
+     [01] Root variables, palette, layout primitives
+     ========================================================= */
+  :root {
+    --bg-top: #c9162d;
+    --bg-bottom: #6f0f1f;
+    --jar-fill: #fff4d6;
+    --jar-rim: #f5d77a;
+    --jar-rim-dark: #b9892a;
+    --death-line: #ff5470;
+    --ink: #2b0a10;
+    --ink-soft: #5a2a30;
+    --paper: #fbf6ee;
+    --gold: #e7b53b;
+    --gold-deep: #b88317;
+    --ok: #2a9d8f;
+    --warn: #e76f51;
+    --pill: rgba(255, 255, 255, 0.16);
+    --pill-strong: rgba(255, 255, 255, 0.28);
+    --tab-h: 66px;
+    --tg-safe-top: 0px;
+    --tg-safe-bottom: 0px;
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0;
+    height: 100%; width: 100%;
+    overflow: hidden; overscroll-behavior: none;
+    user-select: none; -webkit-user-select: none;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", system-ui, sans-serif;
+    color: var(--ink);
+    background:
+      radial-gradient(ellipse at top, #d12a44 0%, #a01a30 55%, #6f0f1f 100%);
+    -webkit-touch-callout: none;
+  }
+  body { position: fixed; inset: 0; }
+
+  #app {
+    position: absolute; inset: 0;
+    padding-top: var(--tg-safe-top);
+    padding-bottom: calc(var(--tg-safe-bottom) + var(--tab-h));
+  }
+
+  .tab-view { position: absolute; inset: 0; display: none; }
+  .tab-view.active { display: block; }
+
+  /* =========================================================
+     [02] Header HUD
+     ========================================================= */
+  .topbar {
+    position: absolute; top: calc(var(--tg-safe-top) + 6px); left: 8px; right: 8px;
+    display: flex; align-items: center; justify-content: space-between;
+    z-index: 30;
+  }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--pill); color: #fff;
+    border-radius: 18px; padding: 6px 12px;
+    font-weight: 700; font-size: 14px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    border: 1px solid rgba(255,255,255,0.18);
+  }
+  .pill.strong { background: var(--pill-strong); }
+  .pill .em { font-size: 16px; line-height: 1; }
+  .pill .num { font-variant-numeric: tabular-nums; }
+  .topbar .left, .topbar .right { display: flex; gap: 6px; }
+
+  .gear {
+    width: 36px; height: 36px;
+    background: var(--pill); color: #fff;
+    border-radius: 50%; border: 1px solid rgba(255,255,255,0.18);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 18px; cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+  }
+  .gear:active { transform: scale(0.94); }
+
+  /* =========================================================
+     [03] Score banner
+     ========================================================= */
+  .score-row {
+    position: absolute; top: calc(var(--tg-safe-top) + 50px);
+    left: 0; right: 0;
+    display: flex; align-items: center; justify-content: center;
+    gap: 18px;
+    z-index: 25;
+    pointer-events: none;
+  }
+  .score-current {
+    color: #fff; text-align: center;
+    text-shadow: 0 2px 6px rgba(0,0,0,0.35);
+  }
+  .score-current .num {
+    font-size: 38px; font-weight: 800; line-height: 1;
+    font-variant-numeric: tabular-nums;
+    background: linear-gradient(180deg, #fff 0%, #ffe6c2 100%);
+    -webkit-background-clip: text; background-clip: text;
+    color: transparent;
+  }
+  .score-current .lbl {
+    font-size: 11px; font-weight: 600; letter-spacing: 1.5px;
+    opacity: 0.78; text-transform: uppercase;
+  }
+  .score-side {
+    color: #fff; text-align: center; opacity: 0.85;
+  }
+  .score-side .num { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .score-side .lbl { font-size: 10px; font-weight: 600; letter-spacing: 1px; opacity: 0.7; text-transform: uppercase; }
+
+  /* =========================================================
+     [03b] Mode toggle (Endless / Daily)
+     ========================================================= */
+  .mode-row {
+    position: absolute; top: calc(var(--tg-safe-top) + 102px);
+    left: 0; right: 0;
+    display: flex; justify-content: center; gap: 4px;
+    z-index: 24; pointer-events: auto;
+  }
+  .mode-pill {
+    background: rgba(255,255,255,0.14);
+    color: #fff; border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 999px;
+    padding: 5px 12px;
+    font-size: 11px; font-weight: 700;
+    letter-spacing: 0.5px; text-transform: uppercase;
+    cursor: pointer;
+    opacity: 0.75;
+  }
+  .mode-pill.active {
+    background: rgba(255,255,255,0.92);
+    color: #a51d30;
+    opacity: 1;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.22);
+  }
+
+  /* =========================================================
+     [04] Game canvas wrap
+     ========================================================= */
+  #canvas-wrap {
+    position: absolute;
+    top: calc(var(--tg-safe-top) + 132px);
+    bottom: 0; left: 0; right: 0;
+    display: flex; justify-content: center; align-items: flex-start;
+  }
+  #game {
+    display: block;
+    background: transparent;
+    touch-action: none;
+  }
+
+  /* =========================================================
+     [05] Next-doll preview pill (top right of jar)
+     ========================================================= */
+  .next-pill {
+    position: absolute;
+    z-index: 20;
+    background: rgba(255,255,255,0.92);
+    color: var(--ink);
+    border-radius: 14px;
+    padding: 6px 10px 6px 8px;
+    font-size: 11px; font-weight: 700;
+    display: flex; align-items: center; gap: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+    border: 1px solid #f5d77a;
+    pointer-events: none;
+  }
+  .next-pill .lbl { letter-spacing: 1px; opacity: 0.7; text-transform: uppercase; font-size: 9px; }
+  .next-pill canvas { display: block; }
+
+  /* =========================================================
+     [05b] Mascot — corner reactive doll
+     ========================================================= */
+  .mascot-wrap {
+    position: absolute;
+    z-index: 16;
+    pointer-events: none;
+  }
+  .mascot-wrap canvas { display: block; }
+  .mascot-bubble {
+    position: absolute;
+    background: #fff; color: var(--ink);
+    border: 1.5px solid var(--gold);
+    border-radius: 10px;
+    padding: 5px 8px;
+    font-size: 11px; font-weight: 700;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.2);
+    white-space: nowrap;
+    opacity: 0; transform: translateY(4px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    pointer-events: none;
+  }
+  .mascot-bubble.show { opacity: 1; transform: translateY(0); }
+  .mascot-bubble::after {
+    content: ''; position: absolute;
+    bottom: -6px; left: 14px;
+    width: 0; height: 0;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 6px solid #fff;
+  }
+
+  /* =========================================================
+     [06] Tiers progress dock (bottom of jar)
+     ========================================================= */
+  .tiers-dock {
+    position: absolute; z-index: 18;
+    display: flex; gap: 3px;
+    padding: 5px 8px;
+    background: rgba(0,0,0,0.18);
+    border-radius: 12px;
+    backdrop-filter: blur(2px);
+    pointer-events: none;
+  }
+  .tier-dot {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(255,255,255,0.35);
+    opacity: 0.35;
+    transition: opacity 0.25s ease, transform 0.2s ease;
+  }
+  .tier-dot.seen { opacity: 1; }
+  .tier-dot.new { animation: tier-pop 0.6s ease; }
+  @keyframes tier-pop {
+    0% { transform: scale(1); }
+    35% { transform: scale(1.5); }
+    100% { transform: scale(1); }
+  }
+
+  /* =========================================================
+     [07] Bottom tab bar
+     ========================================================= */
+  .bottom-tabs {
+    position: fixed; left: 0; right: 0;
+    bottom: 0;
+    height: calc(var(--tab-h) + var(--tg-safe-bottom));
+    padding-bottom: var(--tg-safe-bottom);
+    background: linear-gradient(180deg, #fff 0%, #fbf6ee 100%);
+    border-top: 1px solid #f1d9a0;
+    display: flex; align-items: stretch;
+    z-index: 80;
+    box-shadow: 0 -4px 12px rgba(0,0,0,0.18);
+  }
+  .tab-btn {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 2px;
+    border: none; background: transparent;
+    color: #93644f; font-size: 11px; font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+    transition: color 0.15s ease;
+  }
+  .tab-btn .em { font-size: 22px; line-height: 1; }
+  .tab-btn.active { color: #a51d30; }
+  .tab-btn.active .em { transform: scale(1.1); }
+
+  /* =========================================================
+     [08] Shop tab
+     ========================================================= */
+  .panel {
+    position: absolute; inset: 0;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: calc(var(--tg-safe-top) + 14px) 14px calc(var(--tab-h) + 24px);
+    background: linear-gradient(180deg, var(--paper) 0%, #f6ecd6 100%);
+  }
+  .panel h2 {
+    margin: 0 0 12px;
+    font-size: 22px; color: var(--ink);
+    text-align: center; font-weight: 800;
+  }
+  .panel .sub {
+    text-align: center; color: var(--ink-soft);
+    font-size: 13px; margin: -8px 0 16px;
+  }
+  .sku-grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .sku-card {
+    background: #fff; border: 1px solid #ecd9a8;
+    border-radius: 14px; padding: 12px;
+    box-shadow: 0 2px 6px rgba(118,72,28,0.08);
+    display: flex; flex-direction: column; gap: 6px;
+    position: relative;
+  }
+  .sku-card.feature {
+    grid-column: 1 / -1;
+    background: linear-gradient(135deg, #fff7e0 0%, #ffe7a0 100%);
+    border-color: var(--gold);
+  }
+  .sku-card.feature::before {
+    content: 'BEST VALUE';
+    position: absolute; top: 8px; right: 8px;
+    background: var(--gold-deep); color: #fff;
+    border-radius: 8px; padding: 2px 6px;
+    font-size: 9px; font-weight: 800; letter-spacing: 0.5px;
+  }
+  .sku-icon {
+    font-size: 28px; line-height: 1;
+  }
+  .sku-title { font-size: 14px; font-weight: 800; color: var(--ink); }
+  .sku-desc { font-size: 11px; color: var(--ink-soft); line-height: 1.35; min-height: 28px; }
+  .sku-buy {
+    margin-top: 4px;
+    background: linear-gradient(180deg, #ffd84d 0%, #f5b300 100%);
+    color: var(--ink); font-weight: 800; border: none;
+    border-radius: 10px; padding: 8px 0; cursor: pointer;
+    font-size: 13px;
+    box-shadow: 0 2px 5px rgba(180,120,20,0.3);
+  }
+  .sku-buy:active { transform: translateY(1px); }
+  .sku-buy .star { color: #b88317; }
+
+  /* =========================================================
+     [09] Earn tab
+     ========================================================= */
+  .earn-section {
+    background: #fff; border-radius: 14px; padding: 14px;
+    margin-bottom: 14px;
+    border: 1px solid #ecd9a8;
+    box-shadow: 0 2px 6px rgba(118,72,28,0.06);
+  }
+  .earn-section h3 {
+    margin: 0 0 10px; font-size: 16px; color: var(--ink);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .chest-row {
+    display: grid; grid-template-columns: repeat(7, 1fr);
+    gap: 5px;
+  }
+  .chest-cell {
+    background: #fbf6ee; border: 1.5px solid #ecd9a8;
+    border-radius: 10px; padding: 8px 2px;
+    text-align: center; font-size: 10px; font-weight: 700;
+    color: var(--ink-soft);
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    min-height: 60px; justify-content: center;
+    position: relative;
+  }
+  .chest-cell .em { font-size: 18px; }
+  .chest-cell .gems { font-size: 11px; color: var(--gold-deep); font-weight: 800; }
+  .chest-cell.today { background: #fff5d2; border-color: var(--gold); }
+  .chest-cell.claimed { opacity: 0.5; }
+  .chest-cell.claimed::after {
+    content: '✓'; position: absolute;
+    top: 2px; right: 4px; color: var(--ok);
+    font-weight: 800;
+  }
+  .chest-claim {
+    margin-top: 10px;
+    background: linear-gradient(180deg, #4ad3ad 0%, #2a9d8f 100%);
+    color: #fff; font-weight: 800; border: none;
+    border-radius: 10px; padding: 10px 0; width: 100%;
+    font-size: 14px; cursor: pointer;
+    box-shadow: 0 2px 5px rgba(42,157,143,0.4);
+  }
+  .chest-claim:disabled { background: #cdd5d7; cursor: not-allowed; box-shadow: none; }
+
+  .mission-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid #f3e8c8;
+  }
+  .mission-row:last-child { border-bottom: none; }
+  .mission-icon {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: #fbf6ee; border: 1px solid #ecd9a8;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; flex-shrink: 0;
+  }
+  .mission-body { flex: 1; min-width: 0; }
+  .mission-title { font-size: 13px; font-weight: 800; color: var(--ink); }
+  .mission-sub { font-size: 11px; color: var(--ink-soft); }
+  .mission-cta {
+    flex-shrink: 0;
+    background: var(--gold); color: var(--ink);
+    border: none; border-radius: 8px;
+    padding: 6px 10px; font-size: 12px; font-weight: 800;
+    cursor: pointer;
+  }
+  .mission-cta.done { background: #cdd5d7; color: #6a7570; }
+  .mission-cta.claim { background: var(--ok); color: #fff; animation: claim-pulse 1.4s ease infinite; }
+  @keyframes claim-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.06); }
+  }
+
+  /* =========================================================
+     [09b] Battle pass banner + tournament + achievements
+     ========================================================= */
+  .bp-banner {
+    display: flex; align-items: center; gap: 12px;
+    background: linear-gradient(135deg, #6c2eb5 0%, #9b5de5 100%);
+    border-radius: 12px; padding: 10px 14px;
+    color: #fff;
+  }
+  .bp-icon { font-size: 32px; }
+  .bp-title { font-size: 14px; font-weight: 800; }
+  .bp-sub { font-size: 11px; opacity: 0.85; }
+
+  .t-countdown {
+    font-size: 11px; font-weight: 700;
+    color: var(--ink-soft);
+    background: #fff5d2; border-radius: 8px;
+    padding: 2px 7px; margin-left: auto;
+    border: 1px solid #f5d77a;
+  }
+  .earn-section h3 { display: flex; align-items: center; flex-wrap: wrap; }
+  .t-prizes {
+    display: flex; flex-wrap: wrap; gap: 4px;
+    margin-bottom: 8px;
+    padding: 6px 4px;
+    background: linear-gradient(90deg, #fff5d2 0%, #ffe9a0 100%);
+    border-radius: 8px;
+    font-size: 10px; font-weight: 700; color: var(--ink-soft);
+  }
+  .t-prize-chip {
+    background: #fff; border: 1px solid #f5d77a;
+    border-radius: 6px; padding: 2px 6px;
+    display: inline-flex; align-items: center; gap: 3px;
+  }
+  .t-prize-chip .rk { color: var(--gold-deep); font-weight: 800; }
+  .t-prize-chip.me { background: var(--gold); border-color: var(--gold-deep); color: var(--ink); }
+
+  .ach-progress {
+    font-size: 11px; font-weight: 700;
+    color: var(--ink-soft);
+    background: #fbf6ee; border-radius: 8px;
+    padding: 2px 7px; margin-left: auto;
+    border: 1px solid #ecd9a8;
+  }
+  .ach-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid #f3e8c8;
+  }
+  .ach-row:last-child { border-bottom: none; }
+  .ach-row.locked { opacity: 0.55; }
+  .ach-icon {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: #fbf6ee; border: 1px solid #ecd9a8;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; flex-shrink: 0;
+  }
+  .ach-row.unlocked .ach-icon { background: linear-gradient(135deg, #fff5d2 0%, #ffe9a0 100%); border-color: var(--gold); }
+  .ach-body { flex: 1; min-width: 0; }
+  .ach-title { font-size: 13px; font-weight: 800; color: var(--ink); }
+  .ach-sub { font-size: 11px; color: var(--ink-soft); }
+  .ach-cta {
+    flex-shrink: 0;
+    background: var(--gold); color: var(--ink);
+    border: none; border-radius: 8px;
+    padding: 6px 10px; font-size: 12px; font-weight: 800;
+    cursor: pointer;
+  }
+  .ach-cta.done { background: #cdd5d7; color: #6a7570; }
+  .ach-cta.claim { background: var(--ok); color: #fff; }
+
+  /* Skin picker tiles inside settings modal */
+  .skin-picker { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 8px 0; }
+  .skin-tile {
+    background: var(--paper); border: 2px solid #ecd9a8;
+    border-radius: 10px; padding: 8px 4px;
+    font-size: 11px; font-weight: 700; color: var(--ink-soft);
+    cursor: pointer; text-align: center;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+  }
+  .skin-tile.active { border-color: var(--gold-deep); background: #fff5d2; color: var(--ink); }
+  .skin-tile.locked { opacity: 0.55; }
+  .skin-tile .em { font-size: 22px; }
+
+  /* =========================================================
+     [10] Modal
+     ========================================================= */
+  .modal-shade {
+    position: fixed; inset: 0;
+    background: rgba(40, 8, 16, 0.62);
+    display: none; align-items: center; justify-content: center;
+    z-index: 90;
+    backdrop-filter: blur(3px);
+  }
+  .modal-shade.show { display: flex; animation: shade-in 0.18s ease; }
+  @keyframes shade-in { from { opacity: 0; } to { opacity: 1; } }
+  .modal {
+    background: var(--paper);
+    border-radius: 18px;
+    width: min(360px, 88vw);
+    padding: 22px 18px 18px;
+    text-align: center;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+    animation: modal-in 0.22s cubic-bezier(.34, 1.56, .64, 1);
+  }
+  @keyframes modal-in {
+    from { transform: scale(0.85); opacity: 0; }
+    to   { transform: scale(1); opacity: 1; }
+  }
+  .modal h3 { margin: 0 0 6px; font-size: 22px; color: var(--ink); }
+  .modal .big {
+    font-size: 44px; font-weight: 800;
+    color: var(--gold-deep);
+    font-variant-numeric: tabular-nums;
+    margin: 8px 0 4px;
+  }
+  .modal .sub { color: var(--ink-soft); font-size: 13px; margin-bottom: 14px; }
+  .modal-btns { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+  .btn {
+    background: linear-gradient(180deg, #ffd84d 0%, #f5b300 100%);
+    color: var(--ink); border: none; padding: 12px 14px;
+    border-radius: 12px; font-size: 15px; font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 3px 8px rgba(180,120,20,0.3);
+  }
+  .btn.ghost { background: transparent; color: var(--ink-soft); box-shadow: none; }
+  .btn.danger { background: linear-gradient(180deg, #ff7c92 0%, #d93f5d 100%); color: #fff; }
+  .btn.revive { background: linear-gradient(180deg, #4ad3ad 0%, #2a9d8f 100%); color: #fff; }
+  .btn:active { transform: translateY(1px); }
+
+  /* =========================================================
+     [11] Leaderboard panel (inside Earn tab)
+     ========================================================= */
+  .lb-tabs { display: flex; gap: 6px; margin-bottom: 8px; }
+  .lb-tab-btn {
+    flex: 1; padding: 6px 0; border: none;
+    background: #fbf6ee; color: var(--ink-soft);
+    border-radius: 8px; font-weight: 700; font-size: 12px;
+    cursor: pointer;
+    border: 1px solid #ecd9a8;
+  }
+  .lb-tab-btn.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .lb-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 4px;
+    border-bottom: 1px solid #f3e8c8;
+    font-size: 13px;
+  }
+  .lb-row:last-child { border-bottom: none; }
+  .lb-row.me { background: #fff5d2; border-radius: 8px; padding: 7px 8px; border-bottom: 1px solid transparent; font-weight: 800; }
+  .lb-rank { width: 28px; text-align: right; font-weight: 800; color: var(--ink-soft); }
+  .lb-rank.gold { color: #f1a30a; }
+  .lb-rank.silver { color: #97a5a8; }
+  .lb-rank.bronze { color: #c87a3d; }
+  .lb-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lb-score { font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+  /* =========================================================
+     [11a] Splash screen — brand intro on first load
+     ========================================================= */
+  .splash {
+    position: fixed; inset: 0;
+    background: radial-gradient(ellipse at center, #d12a44 0%, #a01a30 55%, #6f0f1f 100%);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    z-index: 200;
+    transition: opacity 0.4s ease;
+  }
+  .splash.hide { opacity: 0; pointer-events: none; }
+  .splash-logo {
+    font-size: 72px; line-height: 1; margin-bottom: 8px;
+    animation: splash-bob 1.6s ease-in-out infinite;
+    filter: drop-shadow(0 6px 12px rgba(0,0,0,0.35));
+  }
+  @keyframes splash-bob {
+    0%, 100% { transform: translateY(0) rotate(-3deg); }
+    50%      { transform: translateY(-10px) rotate(3deg); }
+  }
+  .splash-title {
+    font-size: 32px; font-weight: 800; color: #fff;
+    letter-spacing: 2px;
+    text-shadow: 0 3px 6px rgba(0,0,0,0.35);
+  }
+  .splash-sub {
+    color: #ffe6c2; font-size: 14px; font-weight: 600;
+    margin-top: 6px; letter-spacing: 1.5px;
+  }
+  .splash-bar {
+    margin-top: 26px; width: 180px; height: 6px;
+    background: rgba(255,255,255,0.18); border-radius: 999px; overflow: hidden;
+  }
+  .splash-bar-fill {
+    height: 100%; width: 0%; background: linear-gradient(90deg, #fdc500, #fff);
+    animation: splash-fill 1.4s ease-in-out forwards;
+  }
+  @keyframes splash-fill {
+    from { width: 0%; }
+    to   { width: 100%; }
+  }
+
+  /* =========================================================
+     [11ab] Power Hour banner
+     ========================================================= */
+  .ph-banner {
+    position: absolute; top: calc(var(--tg-safe-top) + 6px);
+    left: 50%; transform: translateX(-50%);
+    display: none;
+    background: linear-gradient(90deg, #f72585 0%, #ff8c00 100%);
+    color: #fff; font-weight: 800;
+    border-radius: 999px;
+    padding: 5px 12px;
+    font-size: 11px; letter-spacing: 0.5px;
+    box-shadow: 0 3px 8px rgba(247,37,133,0.4);
+    z-index: 28;
+    animation: ph-pulse 1.6s ease-in-out infinite;
+  }
+  .ph-banner.show { display: inline-flex; align-items: center; gap: 6px; }
+  @keyframes ph-pulse {
+    0%, 100% { box-shadow: 0 3px 8px rgba(247,37,133,0.4); }
+    50%      { box-shadow: 0 4px 14px rgba(247,37,133,0.8); }
+  }
+  .ph-banner .em { font-size: 14px; }
+
+  /* =========================================================
+     [11ac] Streak milestone tiles
+     ========================================================= */
+  .milestones {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px;
+  }
+  .milestone {
+    background: #fbf6ee; border: 1.5px solid #ecd9a8;
+    border-radius: 10px; padding: 8px 2px;
+    text-align: center; font-size: 11px; font-weight: 700;
+    color: var(--ink-soft);
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    position: relative; min-height: 78px;
+  }
+  .milestone .em { font-size: 18px; }
+  .milestone .days { font-size: 13px; font-weight: 800; color: var(--ink); }
+  .milestone .reward { font-size: 10px; color: var(--gold-deep); font-weight: 800; }
+  .milestone.unlocked { background: linear-gradient(135deg, #fff5d2 0%, #ffe9a0 100%); border-color: var(--gold); }
+  .milestone.claimed { opacity: 0.5; }
+  .milestone.claimed::after {
+    content: '✓'; position: absolute;
+    top: 2px; right: 5px; color: var(--ok); font-weight: 800;
+  }
+  .milestone.claimable .reward { color: var(--ok); }
+  .milestone.claimable {
+    animation: claim-pulse 1.5s ease infinite;
+    cursor: pointer;
+  }
+
+  /* =========================================================
+     [11ad] Stats panel rows
+     ========================================================= */
+  .stat-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px solid #f3e8c8;
+    font-size: 13px;
+  }
+  .stat-row:last-child { border-bottom: none; }
+  .stat-row .label { color: var(--ink-soft); font-weight: 700; }
+  .stat-row .value { font-weight: 800; font-variant-numeric: tabular-nums; }
+
+  /* =========================================================
+     [11b] FTUE — first-time tutorial overlay with animated demos
+     ========================================================= */
+  .ftue-shade {
+    position: fixed; inset: 0;
+    background: rgba(20, 4, 8, 0.78);
+    backdrop-filter: blur(4px);
+    display: none; align-items: center; justify-content: center;
+    z-index: 110;
+    padding: 16px;
+  }
+  .ftue-shade.show { display: flex; animation: shade-in 0.2s ease; }
+  .ftue-panel {
+    background: linear-gradient(180deg, var(--paper) 0%, #fdf3df 100%);
+    border-radius: 22px;
+    width: min(360px, 92vw);
+    padding: 18px 16px 16px;
+    box-shadow: 0 18px 48px rgba(0,0,0,0.5);
+    animation: modal-in 0.26s cubic-bezier(.34, 1.56, .64, 1);
+    border: 2px solid var(--gold);
+    position: relative;
+  }
+  .ftue-skip {
+    position: absolute; top: 10px; right: 14px;
+    background: transparent; border: none;
+    color: var(--ink-soft); font-size: 12px; font-weight: 700;
+    cursor: pointer; padding: 4px 6px;
+    letter-spacing: 0.5px;
+  }
+  .ftue-skip:active { transform: scale(0.96); }
+  .ftue-demo {
+    width: 100%; height: 200px;
+    background: linear-gradient(180deg, #fff8e2 0%, #f5e2b3 100%);
+    border-radius: 14px;
+    border: 1px solid #ecd9a8;
+    overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 12px;
+  }
+  .ftue-demo canvas { display: block; }
+  .ftue-title {
+    font-size: 22px; font-weight: 800; color: var(--ink);
+    text-align: center; margin: 4px 0 6px;
+  }
+  .ftue-body {
+    font-size: 14px; line-height: 1.45;
+    color: var(--ink-soft);
+    text-align: center;
+    min-height: 50px;
+    margin-bottom: 10px;
+  }
+  .ftue-dots {
+    display: flex; justify-content: center; gap: 6px;
+    margin: 8px 0 12px;
+  }
+  .ftue-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #ecd9a8;
+    transition: width 0.25s ease, background 0.25s ease;
+  }
+  .ftue-dot.active { background: var(--gold-deep); width: 22px; border-radius: 4px; }
+  .ftue-actions {
+    display: flex; gap: 8px;
+  }
+  .ftue-actions .btn { flex: 1; }
+  .ftue-actions .btn.back { background: #fbf6ee; color: var(--ink-soft); box-shadow: none; }
+
+  /* =========================================================
+     [12] Toast
+     ========================================================= */
+  #toast {
+    position: fixed; left: 50%; transform: translateX(-50%);
+    bottom: calc(var(--tab-h) + var(--tg-safe-bottom) + 22px);
+    background: rgba(0,0,0,0.82); color: #fff;
+    padding: 9px 14px; border-radius: 20px;
+    font-size: 13px; font-weight: 700;
+    z-index: 200; pointer-events: none;
+    opacity: 0; transition: opacity 0.2s ease, transform 0.2s ease;
+    max-width: 80vw;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(-4px); }
+</style>
+</head>
+<body>
+
+<!-- ===================== SPLASH SCREEN ===================== -->
+<div class="splash" id="splash">
+  <div class="splash-logo">🪆</div>
+  <div class="splash-title">MATRYOSHKA</div>
+  <div class="splash-sub">DROP · MERGE · REIGN</div>
+  <div class="splash-bar"><div class="splash-bar-fill"></div></div>
+</div>
+
+<!-- ===================== POWER HOUR BANNER ===================== -->
+<div class="ph-banner" id="ph-banner"><span class="em">⚡</span><span id="ph-text">POWER HOUR · 2× rewards</span></div>
+
+<div id="app">
+
+  <!-- ===================== HOME TAB ===================== -->
+  <div class="tab-view active" data-view="home">
+    <div class="topbar">
+      <div class="left">
+        <div class="pill" id="gems-pill"><span class="em">💎</span><span class="num" id="gems-count">0</span></div>
+        <div class="pill" id="streak-pill"><span class="em">🔥</span><span class="num" id="streak-count">0</span></div>
+      </div>
+      <div class="right">
+        <button class="gear" id="btn-undo" title="Undo" style="display:none">↶</button>
+        <button class="gear" id="btn-settings" title="Settings">⚙</button>
+      </div>
+    </div>
+
+    <div class="mode-row">
+      <button class="mode-pill active" data-mode="endless"><span data-i18n="mode_endless">Endless</span></button>
+      <button class="mode-pill" data-mode="daily">🌅 <span data-i18n="mode_daily">Daily</span></button>
+    </div>
+
+    <div class="score-row">
+      <div class="score-side"><div class="num" id="best-score">0</div><div class="lbl" data-i18n="best">Best</div></div>
+      <div class="score-current"><div class="num" id="cur-score">0</div><div class="lbl" data-i18n="score">Score</div></div>
+      <div class="score-side"><div class="num" id="merge-count">0</div><div class="lbl" data-i18n="merges">Merges</div></div>
+    </div>
+
+    <div id="canvas-wrap">
+      <canvas id="game" width="360" height="540"></canvas>
+      <div class="next-pill" id="next-pill">
+        <div>
+          <div class="lbl" data-i18n="next">Next</div>
+        </div>
+        <canvas id="next-canvas" width="44" height="44"></canvas>
+      </div>
+      <div class="tiers-dock" id="tiers-dock"></div>
+      <div class="mascot-wrap" id="mascot-wrap">
+        <div class="mascot-bubble" id="mascot-bubble"></div>
+        <canvas id="mascot-canvas" width="68" height="80"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== SHOP TAB ===================== -->
+  <div class="tab-view" data-view="shop">
+    <div class="panel">
+      <h2 data-i18n="shop_title">⭐ Shop</h2>
+      <div class="sub" data-i18n="shop_sub">Telegram Stars only. No ads, ever.</div>
+      <div class="sku-grid" id="sku-grid"></div>
+    </div>
+  </div>
+
+  <!-- ===================== EARN TAB ===================== -->
+  <div class="tab-view" data-view="earn">
+    <div class="panel">
+      <h2 data-i18n="earn_title">🎁 Earn</h2>
+      <div class="sub" data-i18n="earn_sub">Free gems, missions, leaderboard.</div>
+
+      <div class="earn-section">
+        <h3>🗓 <span data-i18n="daily_chest">Daily Login Chest</span></h3>
+        <div class="chest-row" id="chest-row"></div>
+        <button class="chest-claim" id="chest-claim" data-i18n="claim_today">Claim Today</button>
+      </div>
+
+      <div class="earn-section">
+        <h3>🎯 <span data-i18n="missions">Missions</span></h3>
+        <div id="mission-list"></div>
+      </div>
+
+      <div class="earn-section" id="bp-section" style="display:none">
+        <div class="bp-banner">
+          <div class="bp-icon">🎟</div>
+          <div class="bp-body">
+            <div class="bp-title" data-i18n="bp_active">Season Pass Active</div>
+            <div class="bp-sub" id="bp-sub">2× rewards · expires soon</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="earn-section" id="milestones-section">
+        <h3>🔥 <span data-i18n="streak_milestones">Streak Milestones</span></h3>
+        <div class="milestones" id="milestone-row"></div>
+      </div>
+
+      <div class="earn-section" id="tournament-section">
+        <h3>🏆 <span data-i18n="tournament">Weekly Tournament</span> <span class="t-countdown" id="t-countdown"></span></h3>
+        <div class="t-prizes" id="t-prizes"></div>
+        <div id="t-list"></div>
+      </div>
+
+      <div class="earn-section">
+        <h3>🥇 <span data-i18n="achievements">Achievements</span> <span class="ach-progress" id="ach-progress"></span></h3>
+        <div id="achievement-list"></div>
+      </div>
+
+      <div class="earn-section">
+        <h3>📈 <span data-i18n="leaderboard">Leaderboard</span></h3>
+        <div class="lb-tabs">
+          <button class="lb-tab-btn active" data-lb="regular" data-i18n="all_time">All-Time</button>
+          <button class="lb-tab-btn" data-lb="daily" data-i18n="today">Today</button>
+        </div>
+        <div id="lb-list"></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ===================== BOTTOM TABS ===================== -->
+<nav class="bottom-tabs">
+  <button class="tab-btn" data-tab="shop"><span class="em">⭐</span><span data-i18n="shop">Shop</span></button>
+  <button class="tab-btn active" data-tab="home"><span class="em">🪆</span><span data-i18n="play">Play</span></button>
+  <button class="tab-btn" data-tab="earn"><span class="em">🎁</span><span data-i18n="earn">Earn</span></button>
+</nav>
+
+<!-- ===================== MODAL ===================== -->
+<div class="modal-shade" id="modal-shade">
+  <div class="modal" id="modal-body"></div>
+</div>
+
+<!-- ===================== FTUE OVERLAY ===================== -->
+<div class="ftue-shade" id="ftue-shade">
+  <div class="ftue-panel">
+    <button class="ftue-skip" id="ftue-skip" data-i18n="ftue_skip">SKIP</button>
+    <div class="ftue-demo"><canvas id="ftue-canvas" width="304" height="200"></canvas></div>
+    <div class="ftue-title" id="ftue-title">—</div>
+    <div class="ftue-body" id="ftue-body">—</div>
+    <div class="ftue-dots" id="ftue-dots"></div>
+    <div class="ftue-actions">
+      <button class="btn back" id="ftue-back" data-i18n="ftue_back">← Back</button>
+      <button class="btn" id="ftue-next"><span id="ftue-next-label">Next →</span></button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* =========================================================
+   [JS-01] Constants — tiers, physics, palettes, container dims
+   ========================================================= */
+'use strict';
+
+// Doll tier radii (in canvas px at the reference 360-wide canvas)
+const TIER_RADII = [14, 19, 25, 32, 40, 50, 62, 75, 90, 106, 124];
+const TIER_COUNT = TIER_RADII.length;     // 11
+
+// Mulberry32 PRNG — used for daily-challenge mode (deterministic queue
+// seeded from the UTC date, so every player sees the same drop order).
+function mulberry32(seed) {
+  let a = (seed | 0) >>> 0;
+  return function() {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// Score awarded when a merge produces this tier (index 0 = T1, unused)
+const TIER_SCORES = [0, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66];
+
+// Palette per tier — body color + scarf color. Russian folk palette.
+const TIER_PALETTE = [
+  { body: '#e63946', scarf: '#b21f3a', face: '#ffe6c8', apron: '#ffd166', accent: '#1d3557' },  // T1 red
+  { body: '#f4a261', scarf: '#d17a3a', face: '#ffe6c8', apron: '#fff1c2', accent: '#603c10' },  // T2 orange
+  { body: '#e9c46a', scarf: '#b8902f', face: '#ffe6c8', apron: '#fff5b8', accent: '#5a4011' },  // T3 yellow
+  { body: '#8ab17d', scarf: '#3f7d44', face: '#ffe6c8', apron: '#f5e8a8', accent: '#2c4329' },  // T4 green
+  { body: '#2a9d8f', scarf: '#176d62', face: '#ffe6c8', apron: '#bff0e2', accent: '#0e3a35' },  // T5 teal
+  { body: '#457b9d', scarf: '#22506e', face: '#ffe6c8', apron: '#c4e2f3', accent: '#0a2c44' },  // T6 blue
+  { body: '#9b5de5', scarf: '#6c2eb5', face: '#ffe6c8', apron: '#e1cbff', accent: '#391d6d' },  // T7 violet
+  { body: '#f15bb5', scarf: '#b8328c', face: '#ffe6c8', apron: '#ffd0e7', accent: '#6e1748' },  // T8 pink
+  { body: '#f72585', scarf: '#a8125a', face: '#ffe6c8', apron: '#ffc3da', accent: '#530a31' },  // T9 magenta
+  { body: '#fdc500', scarf: '#b88317', face: '#ffe6c8', apron: '#fff3b8', accent: '#5a3e08' },  // T10 gold
+  { body: '#f1faee', scarf: '#a51d30', face: '#ffe6c8', apron: '#ffb3b3', accent: '#a51d30', crown: true }, // T11 Tsarina
+];
+
+// Skin overrides — re-color every tier while preserving size and silhouette.
+// `classic` returns the base palette as-is (golden-folk look). Khokhloma is
+// black-lacquer with gold florals; Gzhel is white porcelain with cobalt.
+// Tier still reads through size — color is the cosmetic layer.
+const SKINS = {
+  classic: null,
+  khokhloma: function(tier, base) {
+    // Black body, gold accents, red highlight. Slight scarf-hue variation
+    // per tier so the stack still has visual rhythm.
+    const scarves = ['#c08018', '#d4961a', '#e8a420', '#f2b32a', '#fdc500'];
+    const sc = scarves[tier % scarves.length];
+    return {
+      body:  '#1a0d0d',
+      scarf: sc,
+      face:  '#f4dba0',
+      apron: '#7a4818',
+      accent:'#e63946',
+      crown: base.crown,
+      pattern: 'gold',
+    };
+  },
+  gzhel: function(tier, base) {
+    // White-blue porcelain. Cobalt scarf, white apron with subtle blue.
+    const blues = ['#1d3557', '#2a4870', '#3a5b8e', '#4a72ac', '#5a8ac9'];
+    const sc = blues[tier % blues.length];
+    return {
+      body:  '#f4f6fa',
+      scarf: sc,
+      face:  '#fff4dd',
+      apron: '#e0e9f5',
+      accent:'#1d3557',
+      crown: base.crown,
+      pattern: 'blue',
+    };
+  },
+  neon: function(tier, base) {
+    // Cyber-glow palette. Vibrant body color cycling, dark scarf, white face,
+    // glow accents. Pairs visually with darker background but stays readable
+    // on the current jar.
+    const bodies = ['#ff2e63','#ff8c00','#ffd400','#39ff14','#00f5d4','#00bbf9','#9b5de5','#f15bb5','#f72585','#fdc500','#ffffff'];
+    const accents = ['#7a002f','#702a00','#5a4a00','#0a4500','#003f3a','#003f6e','#1f0640','#400a26','#3c0820','#5a3e08','#a51d30'];
+    return {
+      body:  bodies[tier],
+      scarf: accents[tier],
+      face:  '#fff8ff',
+      apron: '#1a1a2a',
+      accent:'#ffffff',
+      crown: base.crown,
+      pattern: 'neon',
+    };
+  },
+  wood: function(tier, base) {
+    // Hand-carved wood. Warm browns, varied wood-grain tones per tier.
+    const woods = ['#c69367','#b8794a','#a55f30','#8c4a20','#7a3f1c','#6d3618','#5b2c14','#4e2510','#3f1d0d','#df8b4d','#fae0bf'];
+    const scarves = ['#7a3f1c','#5b2c14','#3f1d0d','#5b2c14','#7a3f1c','#a55f30','#c69367','#df8b4d','#fae0bf','#a51d30','#a51d30'];
+    return {
+      body:  woods[tier],
+      scarf: scarves[tier],
+      face:  '#fff0d4',
+      apron: '#e8c69a',
+      accent:'#2e1a0c',
+      crown: base.crown,
+      pattern: 'wood',
+    };
+  },
+};
+
+function getPalette(tier) {
+  const skin = state && state.activeSkin || 'classic';
+  const base = TIER_PALETTE[tier];
+  const fn = SKINS[skin];
+  return fn ? fn(tier, base) : base;
+}
+
+// Physics — tuned for 60fps step
+const GRAVITY = 0.42;
+const VELOCITY_DAMP = 0.992;
+const WALL_RESTITUTION = 0.15;
+const BALL_RESTITUTION = 0.05;
+const MAX_VEL = 22;
+const PHYS_SUBSTEPS = 4;
+
+// Game-over: a non-falling doll whose center sits above the death line for
+// DEATH_FRAMES consecutive frames triggers game over.
+const DEATH_FRAMES = 95;       // ~1.6s at 60fps
+
+// Combo: chain merges within this window count as a combo, multiplying
+// score. Combo resets if no merge happens for COMBO_WINDOW_MS.
+const COMBO_WINDOW_MS = 1400;
+// Combo score multipliers: index = combo count. clamp at the end.
+// 2× combo → 1.5×, 3× → 2×, 4× → 2.5×, 5× → 3×, 6+ → +0.5× per step capped.
+function comboMultiplier(combo) {
+  if (combo <= 1) return 1;
+  return Math.min(5, 1 + 0.5 * (combo - 1));
+}
+const COMBO_LABELS = {
+  2: 'NICE',
+  3: 'COMBO',
+  4: 'SWEET',
+  5: 'INSANE',
+  6: 'LEGENDARY',
+  7: 'GODLIKE',
+  8: 'TSARITSA',
+};
+
+// Container (jar) — drawn inside the canvas
+const JAR = {
+  // Canvas coords. Updated on resize.
+  left: 14, right: 346, top: 90, bottom: 532,
+  deathLineY: 102,
+  rimRadius: 14,
+};
+
+// Drop tier weights — smallest tiers are most common. Player never drops > T5.
+const SPAWN_TIER_WEIGHTS = [40, 30, 18, 9, 3];   // sums to 100
+
+/* =========================================================
+   [JS-02] i18n strings — EN + RU full; 18 other langs get
+   headers only via STRINGS[lang] then fall back to EN at t()
+   ========================================================= */
+const STRINGS = {
+  en: {
+    play: 'Play', shop: 'Shop', earn: 'Earn',
+    score: 'Score', best: 'Best', merges: 'Merges', streak: 'Streak', next: 'Next',
+    new_game: 'New Game', play_again: 'Play Again', continue: 'Continue',
+    game_over: 'Game Over', new_high: 'New High Score!',
+    you_scored: 'You scored', your_best: 'Your best',
+    use_revive: 'Use Revive', use_undo: 'Use Undo (50 💎)',
+    settings: 'Settings', sound_on: 'Sound: ON', sound_off: 'Sound: OFF',
+    haptics_on: 'Vibrate: ON', haptics_off: 'Vibrate: OFF',
+    skin: 'Skin',
+    shop_title: '⭐ Shop', shop_sub: 'Telegram Stars only. No ads, ever.',
+    earn_title: '🎁 Earn', earn_sub: 'Free gems, missions, leaderboard.',
+    daily_chest: 'Daily Login Chest', claim_today: 'Claim Today',
+    chest_claimed: 'Claimed', come_back: 'Come back tomorrow!',
+    missions: 'Missions', leaderboard: 'Leaderboard',
+    achievements: 'Achievements', tournament: 'Weekly Tournament',
+    mode_endless: 'Endless', mode_daily: 'Daily',
+    bp_active: 'Season Pass Active',
+    all_time: 'All-Time', today: 'Today',
+    mission_play_3: 'Play 3 games today', mission_play_3_sub: 'Reward: 30 💎',
+    mission_merge_t6: 'Reach the Mother (T6)', mission_merge_t6_sub: 'Reward: 60 💎',
+    mission_share: 'Share Matryoshka', mission_share_sub: 'Reward: 80 💎',
+    mission_follow: 'Follow our Telegram', mission_follow_sub: 'Reward: 100 💎',
+    mission_streak: 'Reach a 7-day streak', mission_streak_sub: 'Reward: 200 💎',
+    go: 'Go', check: 'Check', claim: 'Claim', done: 'Done',
+    not_yet: 'Not yet — keep playing!',
+    welcome_title: 'Matryoshka',
+    welcome_sub: 'Drop dolls. Merge same sizes. Reach the Tsarina.',
+    welcome_start: 'Let\'s play!',
+    iap_unavailable: 'Open from Telegram to buy Stars items.',
+    purchase_success: 'Purchase added!',
+    insufficient_gems: 'Not enough gems.',
+    undo_used: 'Undo!', no_undo: 'Nothing to undo', no_undos_left: 'No undos left',
+    revive_used: 'Revive!',
+    no_revives: 'No revives left',
+    share_text: '🪆 I scored {score} on Matryoshka! Try and beat me 👉',
+    tier_names: ['Seed','Baby','Top','Girl','Aunt','Mother','Grandma','Merchant','Lady','Princess','Tsarina'],
+    how_to_play: 'How to Play',
+    ftue_skip: 'SKIP', ftue_back: '← Back', ftue_next: 'Next →', ftue_lets_play: 'Let\'s Play!',
+    ftue_pyramid_cap: '11 tiers · from seed to Tsarina',
+    ftue_drop_tap: 'Release to drop',
+    ftue_line_label: 'Death line',
+    ftue_goal_cap: 'The Tsarina — your goal',
+    ftue_welcome_title: '🪆 Welcome to Matryoshka',
+    ftue_welcome_body: 'Drop nesting dolls into the jar, merge same sizes, and climb the eleven tiers to the legendary Tsarina.',
+    ftue_drop_title: 'Slide and Drop',
+    ftue_drop_body: 'Move your finger left and right to aim. Release to drop the doll into the jar.',
+    ftue_merge_title: 'Same Sizes Merge!',
+    ftue_merge_body: 'Two dolls of the same size combine into the next size up — and score you points.',
+    ftue_line_title: 'Watch the Red Line',
+    ftue_line_body: 'If a doll piles above the dashed line for too long, the game ends. Plan your drops!',
+    ftue_goal_title: 'Reach the Tsarina 👑',
+    ftue_goal_body: 'Two Tsarinas + 200 bonus points. How far can you climb?',
+    streak_milestones: 'Streak Milestones',
+    stats_title: 'Your Stats',
+    stat_best: 'Best Score (Endless)', stat_best_daily: 'Best Daily Today',
+    stat_best_tier: 'Highest Tier', stat_best_combo: 'Best Combo',
+    stat_games: 'Games Played', stat_merges: 'Total Merges',
+    stat_streak: 'Current Streak', stat_gems: 'Gems', stat_skins: 'Skins Owned',
+    power_hour: 'Power Hour',
+  },
+  ru: {
+    play: 'Играть', shop: 'Магазин', earn: 'Бонусы',
+    score: 'Счёт', best: 'Рекорд', merges: 'Слияний', streak: 'Серия', next: 'Дальше',
+    new_game: 'Новая игра', play_again: 'Ещё раз', continue: 'Продолжить',
+    game_over: 'Конец игры', new_high: 'Новый рекорд!',
+    you_scored: 'Твой счёт', your_best: 'Лучший',
+    use_revive: 'Возродиться', use_undo: 'Отмена (50 💎)',
+    settings: 'Настройки', sound_on: 'Звук: ВКЛ', sound_off: 'Звук: ВЫКЛ',
+    haptics_on: 'Вибро: ВКЛ', haptics_off: 'Вибро: ВЫКЛ',
+    skin: 'Скин',
+    shop_title: '⭐ Магазин', shop_sub: 'Только Telegram Stars. Без рекламы.',
+    earn_title: '🎁 Бонусы', earn_sub: 'Бесплатные гемы, миссии, рейтинг.',
+    daily_chest: 'Ежедневный сундук', claim_today: 'Забрать сегодня',
+    chest_claimed: 'Получено', come_back: 'Возвращайся завтра!',
+    missions: 'Миссии', leaderboard: 'Рейтинг',
+    achievements: 'Достижения', tournament: 'Турнир Недели',
+    mode_endless: 'Бесконечный', mode_daily: 'Дневной',
+    bp_active: 'Сезонный Пропуск',
+    all_time: 'Всё время', today: 'Сегодня',
+    mission_play_3: 'Сыграй 3 игры сегодня', mission_play_3_sub: 'Награда: 30 💎',
+    mission_merge_t6: 'Собери Маму (T6)', mission_merge_t6_sub: 'Награда: 60 💎',
+    mission_share: 'Поделись Матрёшкой', mission_share_sub: 'Награда: 80 💎',
+    mission_follow: 'Подпишись на наш Telegram', mission_follow_sub: 'Награда: 100 💎',
+    mission_streak: 'Серия 7 дней', mission_streak_sub: 'Награда: 200 💎',
+    go: 'Перейти', check: 'Проверить', claim: 'Забрать', done: 'Готово',
+    not_yet: 'Пока нет — играй дальше!',
+    welcome_title: 'Матрёшка',
+    welcome_sub: 'Бросай куколок. Соединяй одинаковых. Доберись до Царицы.',
+    welcome_start: 'Поехали!',
+    iap_unavailable: 'Открой из Telegram чтобы покупать.',
+    purchase_success: 'Покупка добавлена!',
+    insufficient_gems: 'Недостаточно гемов.',
+    undo_used: 'Отмена!', no_undo: 'Нечего отменять', no_undos_left: 'Закончились отмены',
+    revive_used: 'Возрождение!',
+    no_revives: 'Нет возрождений',
+    share_text: '🪆 Мой счёт в Матрёшке — {score}! Сможешь больше? 👉',
+    tier_names: ['Зёрнышко','Малыш','Юла','Девочка','Тётя','Мама','Бабушка','Купчиха','Барыня','Княгиня','Царица'],
+    how_to_play: 'Как играть',
+    ftue_skip: 'ПРОПУСТИТЬ', ftue_back: '← Назад', ftue_next: 'Далее →', ftue_lets_play: 'Поехали!',
+    ftue_pyramid_cap: '11 уровней · от зёрнышка до Царицы',
+    ftue_drop_tap: 'Отпусти, чтобы бросить',
+    ftue_line_label: 'Граница',
+    ftue_goal_cap: 'Царица — твоя цель',
+    ftue_welcome_title: '🪆 Добро пожаловать в Матрёшку',
+    ftue_welcome_body: 'Бросай куколок в баночку, соединяй одинаковых и поднимайся через одиннадцать уровней к легендарной Царице.',
+    ftue_drop_title: 'Двигай и бросай',
+    ftue_drop_body: 'Двигай пальцем влево-вправо чтобы прицелиться. Отпусти, чтобы бросить матрёшку в баночку.',
+    ftue_merge_title: 'Одинаковые соединяются!',
+    ftue_merge_body: 'Две матрёшки одного размера соединяются в следующую — и дают очки.',
+    ftue_line_title: 'Следи за красной линией',
+    ftue_line_body: 'Если матрёшка стоит над пунктирной линией слишком долго — игра окончена. Думай наперёд!',
+    ftue_goal_title: 'Доберись до Царицы 👑',
+    ftue_goal_body: 'Две Царицы = +200 очков бонуса. Как высоко ты заберёшься?',
+    streak_milestones: 'Награды за серию',
+    stats_title: 'Твоя статистика',
+    stat_best: 'Лучший счёт (Беск.)', stat_best_daily: 'Дневной рекорд',
+    stat_best_tier: 'Высший уровень', stat_best_combo: 'Лучшее комбо',
+    stat_games: 'Сыграно игр', stat_merges: 'Всего слияний',
+    stat_streak: 'Текущая серия', stat_gems: 'Гемы', stat_skins: 'Скины',
+    power_hour: 'Час Силы',
+  },
+  // Header-only translations (fall back to EN for missing keys at t() level)
+  es: {
+    play: 'Jugar', shop: 'Tienda', earn: 'Premios',
+    score: 'Puntos', best: 'Mejor', merges: 'Fusiones', streak: 'Racha', next: 'Siguiente',
+    new_game: 'Nuevo Juego', play_again: 'Jugar de Nuevo',
+    game_over: 'Fin del Juego', new_high: '¡Nuevo Récord!',
+    use_revive: 'Revivir', settings: 'Ajustes', skin: 'Tema',
+    shop_title: '⭐ Tienda', shop_sub: 'Solo Telegram Stars. Sin anuncios.',
+    earn_title: '🎁 Premios', earn_sub: 'Gemas gratis, misiones, ranking.',
+    daily_chest: 'Cofre Diario', claim_today: 'Reclamar Hoy',
+    achievements: 'Logros', tournament: 'Torneo Semanal',
+    mode_endless: 'Sin Fin', mode_daily: 'Diario',
+    all_time: 'Histórico', today: 'Hoy',
+    go: 'Ir', claim: 'Reclamar', done: 'Hecho',
+    welcome_title: 'Matryoshka', welcome_start: '¡Vamos!',
+    how_to_play: 'Cómo jugar',
+    ftue_skip: 'OMITIR', ftue_back: '← Atrás', ftue_next: 'Siguiente →', ftue_lets_play: '¡A jugar!',
+    ftue_welcome_title: '🪆 Bienvenido a Matryoshka',
+    ftue_welcome_body: 'Lanza muñecas, fusiona las del mismo tamaño y llega hasta la legendaria Tsarina.',
+    ftue_drop_title: 'Desliza y suelta',
+    ftue_drop_body: 'Mueve tu dedo para apuntar. Suelta para dejar caer la muñeca.',
+    ftue_merge_title: '¡Mismos tamaños se fusionan!',
+    ftue_merge_body: 'Dos muñecas iguales se combinan en la siguiente — y te dan puntos.',
+    ftue_line_title: 'Cuidado con la línea roja',
+    ftue_line_body: 'Si una muñeca se queda sobre la línea, se acaba la partida. ¡Planea bien!',
+    ftue_goal_title: 'Alcanza a la Tsarina 👑',
+    ftue_goal_body: 'Dos Tsarinas = +200 puntos. ¿Hasta dónde llegarás?',
+  },
+  pt: {
+    play: 'Jogar', shop: 'Loja', earn: 'Ganhar',
+    score: 'Pontos', best: 'Melhor', merges: 'Fusões', streak: 'Sequência', next: 'Próxima',
+    new_game: 'Novo Jogo', play_again: 'Jogar Novamente',
+    game_over: 'Fim de Jogo', new_high: 'Novo Recorde!',
+    use_revive: 'Reviver', settings: 'Ajustes', skin: 'Tema',
+    shop_title: '⭐ Loja', shop_sub: 'Apenas Stars. Sem anúncios.',
+    earn_title: '🎁 Ganhar', daily_chest: 'Baú Diário', claim_today: 'Coletar Hoje',
+    achievements: 'Conquistas', tournament: 'Torneio Semanal',
+    mode_endless: 'Sem Fim', mode_daily: 'Diário',
+    all_time: 'Histórico', today: 'Hoje',
+    go: 'Ir', claim: 'Coletar', done: 'Pronto',
+    welcome_title: 'Matryoshka', welcome_start: 'Vamos!',
+    how_to_play: 'Como jogar',
+    ftue_skip: 'PULAR', ftue_back: '← Voltar', ftue_next: 'Próximo →', ftue_lets_play: 'Vamos jogar!',
+    ftue_welcome_title: '🪆 Bem-vindo ao Matryoshka',
+    ftue_welcome_body: 'Solte bonecas, una as do mesmo tamanho e alcance a lendária Tsarina.',
+    ftue_drop_title: 'Deslize e solte',
+    ftue_drop_body: 'Mova o dedo para mirar. Solte para deixar cair a boneca.',
+    ftue_merge_title: 'Tamanhos iguais se fundem!',
+    ftue_merge_body: 'Duas bonecas iguais se juntam na próxima — e te dão pontos.',
+    ftue_line_title: 'Cuidado com a linha',
+    ftue_line_body: 'Se uma boneca ficar acima da linha, fim de jogo. Planeje seus lançamentos!',
+    ftue_goal_title: 'Alcance a Tsarina 👑',
+    ftue_goal_body: 'Duas Tsarinas = +200 pontos. Até onde você vai?',
+  },
+  fr: {
+    play: 'Jouer', shop: 'Boutique', earn: 'Gagner',
+    score: 'Score', best: 'Record', merges: 'Fusions', streak: 'Série', next: 'Suiv.',
+    new_game: 'Nouvelle Partie', play_again: 'Rejouer',
+    game_over: 'Partie Terminée', new_high: 'Nouveau Record!',
+    use_revive: 'Revivre', settings: 'Réglages', skin: 'Thème',
+    shop_title: '⭐ Boutique', shop_sub: 'Stars uniquement. Pas de pubs.',
+    earn_title: '🎁 Gagner', daily_chest: 'Coffre Quotidien', claim_today: 'Réclamer',
+    achievements: 'Succès', tournament: 'Tournoi Hebdomadaire',
+    mode_endless: 'Infini', mode_daily: 'Quotidien',
+    all_time: 'Tous', today: 'Auj.',
+    go: 'Aller', claim: 'Réclamer', done: 'Fait',
+    welcome_title: 'Matriochka', welcome_start: 'Allons-y!',
+    how_to_play: 'Comment jouer',
+    ftue_skip: 'PASSER', ftue_back: '← Retour', ftue_next: 'Suivant →', ftue_lets_play: 'On joue!',
+    ftue_welcome_title: '🪆 Bienvenue dans Matriochka',
+    ftue_welcome_body: 'Lance des poupées, fusionne les mêmes tailles et atteins la légendaire Tsarine.',
+    ftue_drop_title: 'Glisse et lâche',
+    ftue_drop_body: 'Bouge ton doigt pour viser. Lâche pour faire tomber la poupée.',
+    ftue_merge_title: 'Mêmes tailles fusionnent!',
+    ftue_merge_body: 'Deux poupées identiques se combinent — et te donnent des points.',
+    ftue_line_title: 'Attention à la ligne rouge',
+    ftue_line_body: 'Si une poupée reste au-dessus, c\'est terminé. Planifie tes lâchers!',
+    ftue_goal_title: 'Atteins la Tsarine 👑',
+    ftue_goal_body: 'Deux Tsarines = +200 points. Jusqu\'où iras-tu?',
+  },
+  de: {
+    play: 'Spielen', shop: 'Shop', earn: 'Bonus',
+    score: 'Punkte', best: 'Rekord', merges: 'Fusionen', streak: 'Serie', next: 'Nächste',
+    new_game: 'Neues Spiel', play_again: 'Nochmal Spielen',
+    game_over: 'Spiel Aus', new_high: 'Neuer Rekord!',
+    use_revive: 'Wiederbeleben', settings: 'Einstellungen', skin: 'Skin',
+    shop_title: '⭐ Shop', shop_sub: 'Nur Stars. Keine Werbung.',
+    earn_title: '🎁 Bonus', daily_chest: 'Tägliche Truhe', claim_today: 'Heute Holen',
+    achievements: 'Erfolge', tournament: 'Wochenturnier',
+    mode_endless: 'Endlos', mode_daily: 'Täglich',
+    all_time: 'Allzeit', today: 'Heute',
+    go: 'Los', claim: 'Holen', done: 'Erledigt',
+    welcome_title: 'Matrjoschka', welcome_start: 'Los geht\'s!',
+    how_to_play: 'Spielanleitung',
+    ftue_skip: 'ÜBERSPRINGEN', ftue_back: '← Zurück', ftue_next: 'Weiter →', ftue_lets_play: 'Los spielen!',
+    ftue_welcome_title: '🪆 Willkommen bei Matrjoschka',
+    ftue_welcome_body: 'Lass Puppen fallen, verbinde gleiche Größen und erreiche die legendäre Zarin.',
+    ftue_drop_title: 'Wischen und Loslassen',
+    ftue_drop_body: 'Bewege deinen Finger zum Zielen. Lass los, um die Puppe fallen zu lassen.',
+    ftue_merge_title: 'Gleiche fusionieren!',
+    ftue_merge_body: 'Zwei gleiche Puppen verschmelzen zur nächsten Größe — und geben Punkte.',
+    ftue_line_title: 'Achte auf die rote Linie',
+    ftue_line_body: 'Bleibt eine Puppe über der Linie, ist das Spiel vorbei. Plane voraus!',
+    ftue_goal_title: 'Erreiche die Zarin 👑',
+    ftue_goal_body: 'Zwei Zarinnen = +200 Punkte. Wie weit kommst du?',
+  },
+  nl: {
+    play: 'Spelen', shop: 'Winkel', earn: 'Bonus',
+    score: 'Score', best: 'Beste', merges: 'Fusies', streak: 'Reeks', next: 'Volgende',
+    new_game: 'Nieuw Spel', play_again: 'Opnieuw',
+    game_over: 'Spel Voorbij', new_high: 'Nieuw Record!',
+    use_revive: 'Herleven', settings: 'Instellingen', skin: 'Skin',
+    daily_chest: 'Dagelijkse Kist', claim_today: 'Vandaag Claimen',
+    achievements: 'Prestaties', tournament: 'Weekendtoernooi',
+    mode_endless: 'Eindeloos', mode_daily: 'Dagelijks',
+    all_time: 'Aller Tijden', today: 'Vandaag',
+    go: 'Ga', claim: 'Claim', done: 'Klaar',
+    how_to_play: 'Hoe te spelen', stats_title: 'Statistieken',
+  },
+  it: {
+    play: 'Gioca', shop: 'Negozio', earn: 'Premi',
+    score: 'Punti', best: 'Record', merges: 'Fusioni', streak: 'Serie', next: 'Pross.',
+    new_game: 'Nuova Partita', play_again: 'Rigioca',
+    game_over: 'Fine Partita', new_high: 'Nuovo Record!',
+    use_revive: 'Rinascere', settings: 'Impostazioni', skin: 'Tema',
+    daily_chest: 'Scrigno Quotidiano', claim_today: 'Riscatta Oggi',
+    achievements: 'Obiettivi', tournament: 'Torneo Settimanale',
+    mode_endless: 'Infinito', mode_daily: 'Quotidiano',
+    all_time: 'Sempre', today: 'Oggi',
+    go: 'Vai', claim: 'Riscatta', done: 'Fatto',
+    how_to_play: 'Come giocare', stats_title: 'Statistiche',
+  },
+  sv: {
+    play: 'Spela', shop: 'Butik', earn: 'Bonus',
+    score: 'Poäng', best: 'Bästa', merges: 'Fusioner', streak: 'Svit', next: 'Nästa',
+    new_game: 'Nytt Spel', play_again: 'Spela Igen',
+    game_over: 'Spelet Slut', new_high: 'Nytt Rekord!',
+    use_revive: 'Återuppliva', settings: 'Inställningar', skin: 'Skin',
+    daily_chest: 'Daglig Kista', claim_today: 'Hämta Idag',
+    achievements: 'Prestationer', tournament: 'Veckoturnering',
+    mode_endless: 'Oändlig', mode_daily: 'Daglig',
+    all_time: 'Alltid', today: 'Idag',
+    go: 'Gå', claim: 'Hämta', done: 'Klar',
+    how_to_play: 'Hur man spelar', stats_title: 'Statistik',
+  },
+  pl: {
+    play: 'Graj', shop: 'Sklep', earn: 'Nagrody',
+    score: 'Wynik', best: 'Rekord', merges: 'Fuzje', streak: 'Seria', next: 'Dalej',
+    new_game: 'Nowa Gra', play_again: 'Zagraj Ponownie',
+    game_over: 'Koniec Gry', new_high: 'Nowy Rekord!',
+    use_revive: 'Wskrześ', settings: 'Ustawienia', skin: 'Skórka',
+    daily_chest: 'Skrzynia Dzienna', claim_today: 'Odbierz Dzisiaj',
+    achievements: 'Osiągnięcia', tournament: 'Turniej Tygodniowy',
+    mode_endless: 'Nieskończony', mode_daily: 'Dzienny',
+    all_time: 'Wszechczasy', today: 'Dziś',
+    go: 'Idź', claim: 'Odbierz', done: 'Gotowe',
+    how_to_play: 'Jak grać', stats_title: 'Statystyki',
+  },
+  tr: {
+    play: 'Oyna', shop: 'Mağaza', earn: 'Kazan',
+    score: 'Puan', best: 'En İyi', merges: 'Birleşmeler', streak: 'Seri', next: 'Sıradaki',
+    new_game: 'Yeni Oyun', play_again: 'Tekrar Oyna',
+    game_over: 'Oyun Bitti', new_high: 'Yeni Rekor!',
+    use_revive: 'Dirilt', settings: 'Ayarlar', skin: 'Tema',
+    daily_chest: 'Günlük Sandık', claim_today: 'Bugün Al',
+    achievements: 'Başarımlar', tournament: 'Haftalık Turnuva',
+    mode_endless: 'Sonsuz', mode_daily: 'Günlük',
+    all_time: 'Tüm Zamanlar', today: 'Bugün',
+    go: 'Git', claim: 'Al', done: 'Tamam',
+    how_to_play: 'Nasıl oynanır', stats_title: 'İstatistikler',
+  },
+  uk: {
+    play: 'Грати', shop: 'Магазин', earn: 'Бонуси',
+    score: 'Очки', best: 'Рекорд', merges: 'Злиття', streak: 'Серія', next: 'Далі',
+    new_game: 'Нова гра', play_again: 'Ще раз',
+    game_over: 'Кінець гри', new_high: 'Новий рекорд!',
+    use_revive: 'Відродитись', settings: 'Налаштування', skin: 'Скін',
+    shop_title: '⭐ Магазин', shop_sub: 'Тільки Telegram Stars. Без реклами.',
+    earn_title: '🎁 Бонуси', daily_chest: 'Щоденна скриня', claim_today: 'Забрати сьогодні',
+    achievements: 'Досягнення', tournament: 'Тижневий турнір',
+    mode_endless: 'Безкінечний', mode_daily: 'Щоденний',
+    all_time: 'Весь час', today: 'Сьогодні',
+    go: 'Перейти', claim: 'Забрати', done: 'Готово',
+    welcome_title: 'Матрьошка', welcome_start: 'Поїхали!',
+    how_to_play: 'Як грати',
+    ftue_skip: 'ПРОПУСТИТИ', ftue_back: '← Назад', ftue_next: 'Далі →', ftue_lets_play: 'Поїхали!',
+    ftue_welcome_title: '🪆 Ласкаво просимо в Матрьошку',
+    ftue_welcome_body: 'Кидай ляльок, об\'єднуй однакові і доберись до легендарної Цариці.',
+    ftue_drop_title: 'Сунь і кидай',
+    ftue_drop_body: 'Рухай пальцем щоб прицілитись. Відпусти щоб кинути ляльку.',
+    ftue_merge_title: 'Однакові об\'єднуються!',
+    ftue_merge_body: 'Дві однакові ляльки об\'єднуються в наступну — і дають очки.',
+    ftue_line_title: 'Слідкуй за червоною лінією',
+    ftue_line_body: 'Якщо лялька стоїть над лінією — кінець гри. Плануй кидки!',
+    ftue_goal_title: 'Доберись до Цариці 👑',
+    ftue_goal_body: 'Дві Цариці = +200 очок. Як високо заберешся?',
+  },
+  ar: {
+    play: 'العب', shop: 'متجر', earn: 'كسب',
+    score: 'النقاط', best: 'الأفضل', merges: 'دمج', streak: 'سلسلة', next: 'التالي',
+    new_game: 'لعبة جديدة', play_again: 'العب مجددا',
+    game_over: 'انتهت اللعبة', new_high: 'رقم قياسي جديد!',
+    use_revive: 'إحياء', settings: 'الإعدادات', skin: 'الجلد',
+    daily_chest: 'صندوق يومي', claim_today: 'احصل اليوم',
+    achievements: 'الإنجازات', tournament: 'البطولة الأسبوعية',
+    mode_endless: 'لا نهائي', mode_daily: 'يومي',
+    all_time: 'كل الأوقات', today: 'اليوم',
+    go: 'اذهب', claim: 'احصل', done: 'تم',
+    how_to_play: 'كيف تلعب', stats_title: 'إحصائياتك',
+  },
+  he: {
+    play: 'שחק', shop: 'חנות', earn: 'בונוסים',
+    score: 'נקודות', best: 'שיא', merges: 'מיזוגים', streak: 'רצף', next: 'הבא',
+    new_game: 'משחק חדש', play_again: 'שחק שוב',
+    game_over: 'המשחק נגמר', new_high: 'שיא חדש!',
+    use_revive: 'תחיה', settings: 'הגדרות', skin: 'עיצוב',
+    daily_chest: 'תיבה יומית', claim_today: 'קבל היום',
+    achievements: 'הישגים', tournament: 'טורניר שבועי',
+    mode_endless: 'אינסופי', mode_daily: 'יומי',
+    all_time: 'כל הזמן', today: 'היום',
+    go: 'לך', claim: 'קבל', done: 'סיים',
+    how_to_play: 'איך לשחק', stats_title: 'הסטטיסטיקה שלך',
+  },
+  hi: {
+    play: 'खेलें', shop: 'दुकान', earn: 'पुरस्कार',
+    score: 'स्कोर', best: 'सर्वश्रेष्ठ', merges: 'मर्ज', streak: 'श्रृंखला', next: 'अगला',
+    new_game: 'नया खेल', play_again: 'फिर खेलें',
+    game_over: 'खेल समाप्त', new_high: 'नया रिकॉर्ड!',
+    use_revive: 'पुनर्जीवित करें', settings: 'सेटिंग्स', skin: 'थीम',
+    daily_chest: 'दैनिक संदूक', claim_today: 'आज प्राप्त करें',
+    achievements: 'उपलब्धियाँ', tournament: 'साप्ताहिक टूर्नामेंट',
+    mode_endless: 'अनंत', mode_daily: 'दैनिक',
+    all_time: 'सर्वकालिक', today: 'आज',
+    go: 'जाएँ', claim: 'प्राप्त करें', done: 'पूर्ण',
+    how_to_play: 'कैसे खेलें', stats_title: 'आपके आँकड़े',
+  },
+  id: {
+    play: 'Main', shop: 'Toko', earn: 'Bonus',
+    score: 'Skor', best: 'Terbaik', merges: 'Penggabungan', streak: 'Beruntun', next: 'Berikut',
+    new_game: 'Permainan Baru', play_again: 'Main Lagi',
+    game_over: 'Permainan Selesai', new_high: 'Rekor Baru!',
+    use_revive: 'Hidupkan', settings: 'Pengaturan', skin: 'Tema',
+    daily_chest: 'Peti Harian', claim_today: 'Klaim Hari Ini',
+    achievements: 'Pencapaian', tournament: 'Turnamen Mingguan',
+    mode_endless: 'Tanpa Akhir', mode_daily: 'Harian',
+    all_time: 'Sepanjang Waktu', today: 'Hari Ini',
+    go: 'Pergi', claim: 'Klaim', done: 'Selesai',
+    how_to_play: 'Cara bermain', stats_title: 'Statistik Anda',
+  },
+  vi: {
+    play: 'Chơi', shop: 'Cửa hàng', earn: 'Phần thưởng',
+    score: 'Điểm', best: 'Cao nhất', merges: 'Hợp nhất', streak: 'Chuỗi', next: 'Tiếp',
+    new_game: 'Trò chơi mới', play_again: 'Chơi lại',
+    game_over: 'Kết thúc', new_high: 'Kỷ lục mới!',
+    use_revive: 'Hồi sinh', settings: 'Cài đặt', skin: 'Giao diện',
+    daily_chest: 'Rương hàng ngày', claim_today: 'Nhận hôm nay',
+    achievements: 'Thành tựu', tournament: 'Giải đấu tuần',
+    mode_endless: 'Vô tận', mode_daily: 'Hàng ngày',
+    all_time: 'Mọi lúc', today: 'Hôm nay',
+    go: 'Đi', claim: 'Nhận', done: 'Xong',
+    how_to_play: 'Cách chơi', stats_title: 'Thống kê',
+  },
+  zh: {
+    play: '游戏', shop: '商店', earn: '奖励',
+    score: '得分', best: '最高', merges: '合并', streak: '连胜', next: '下一个',
+    new_game: '新游戏', play_again: '再玩一次',
+    game_over: '游戏结束', new_high: '新纪录!',
+    use_revive: '复活', settings: '设置', skin: '皮肤',
+    daily_chest: '每日宝箱', claim_today: '今日领取',
+    achievements: '成就', tournament: '每周锦标赛',
+    mode_endless: '无尽', mode_daily: '每日',
+    all_time: '全部', today: '今日',
+    go: '前往', claim: '领取', done: '完成',
+    how_to_play: '玩法', stats_title: '统计',
+  },
+  ko: {
+    play: '플레이', shop: '상점', earn: '보상',
+    score: '점수', best: '최고', merges: '합치기', streak: '연속', next: '다음',
+    new_game: '새 게임', play_again: '다시 하기',
+    game_over: '게임 종료', new_high: '신기록!',
+    use_revive: '부활', settings: '설정', skin: '스킨',
+    daily_chest: '일일 상자', claim_today: '오늘 받기',
+    achievements: '업적', tournament: '주간 토너먼트',
+    mode_endless: '무한', mode_daily: '일일',
+    all_time: '전체', today: '오늘',
+    go: '이동', claim: '받기', done: '완료',
+    how_to_play: '플레이 방법', stats_title: '내 통계',
+  },
+  ja: {
+    play: 'プレイ', shop: 'ショップ', earn: 'ボーナス',
+    score: 'スコア', best: 'ベスト', merges: 'マージ', streak: '連続', next: '次',
+    new_game: '新ゲーム', play_again: 'もう一度',
+    game_over: 'ゲームオーバー', new_high: 'ハイスコア!',
+    use_revive: '復活', settings: '設定', skin: 'スキン',
+    daily_chest: 'デイリー宝箱', claim_today: '本日受取',
+    achievements: '実績', tournament: '週間トーナメント',
+    mode_endless: 'エンドレス', mode_daily: 'デイリー',
+    all_time: '全期間', today: '今日',
+    go: '行く', claim: '受取', done: '完了',
+    how_to_play: '遊び方', stats_title: '統計',
+  },
+};
+
+const RTL_LANGS = ['ar', 'he'];
+
+function detectLang() {
+  try {
+    const tg = window.Telegram && window.Telegram.WebApp;
+    const cand =
+      (tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.language_code) ||
+      (navigator.language || 'en');
+    const code = String(cand).toLowerCase().split('-')[0];
+    return STRINGS[code] ? code : 'en';
+  } catch (e) { return 'en'; }
+}
+
+function t(key) {
+  const lang = state.settings.lang || 'en';
+  const tbl = STRINGS[lang] || {};
+  if (tbl[key] !== undefined) return tbl[key];
+  return STRINGS.en[key] || key;
+}
+
+function applyI18n() {
+  document.documentElement.lang = state.settings.lang || 'en';
+  document.documentElement.dir = RTL_LANGS.includes(state.settings.lang) ? 'rtl' : 'ltr';
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const k = el.getAttribute('data-i18n');
+    const v = t(k);
+    if (typeof v === 'string') el.textContent = v;
+  });
+}
+
+/* =========================================================
+   [JS-03] State — save/load, defaults
+   ========================================================= */
+const SAVE_KEY = 'matryoshka.v1';
+
+const defaultState = () => ({
+  settings: { lang: 'en', sound: true, haptics: true },
+  gems: 100,
+  revives: 1,
+  undos: 2,
+  previews: 0,
+  shieldDays: 0,
+  best: 0,
+  bestDaily: 0,
+  bestTierEver: 0,
+  highestTierSeen: 0,
+  streak: 0, lastPlayedYMD: '',
+  totalGamesEver: 0, totalMergesEver: 0, totalIapsEver: 0,
+  bestComboEver: 0,
+  skins: ['classic'], activeSkin: 'classic',
+  chestDay: 1, chestClaimedYMD: '',
+  gamesPlayedToday: 0, gamesPlayedYMD: '',
+  missions: {},          // {id: {claimed, claimedYMD, goneOut}}
+  achievements: {},      // {id: {unlockedYMD}}
+  battlePassUntil: 0,
+  activeTab: 'home',
+  ftueDone: false,
+  mode: 'endless',       // 'endless' | 'daily'
+  lastDailyYMD: '',
+  dailyBestToday: 0,
+  dailyYMD: '',
+  lastSeenTournamentId: '',
+  firstSeenAt: 0, welcomed: false,
+});
+
+let state = defaultState();
+function load() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    state = Object.assign(defaultState(), parsed);
+    state.settings = Object.assign({ lang: detectLang(), sound: true, haptics: true }, parsed.settings || {});
+  } catch (e) { state = defaultState(); state.settings.lang = detectLang(); }
+}
+let saveDebounce;
+function save() {
+  clearTimeout(saveDebounce);
+  saveDebounce = setTimeout(() => {
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch (e) {}
+    serverStateSave();
+  }, 800);
+}
+
+/* =========================================================
+   [JS-04] Telegram WebApp bridge + server bridge
+   ========================================================= */
+const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+function tgReady() {
+  if (!tg) return;
+  try {
+    tg.ready();
+    tg.expand();
+    tg.setHeaderColor && tg.setHeaderColor('#a51d30');
+    tg.setBackgroundColor && tg.setBackgroundColor('#a51d30');
+  } catch (e) {}
+  applySafeArea();
+}
+function applySafeArea() {
+  let top = 0, bottom = 0;
+  try {
+    if (tg) {
+      const ci = tg.contentSafeAreaInset;
+      if (ci) { top = ci.top || 0; bottom = ci.bottom || 0; }
+      const sa = tg.safeAreaInset;
+      if (sa) { top = Math.max(top, sa.top || 0); bottom = Math.max(bottom, sa.bottom || 0); }
+    }
+  } catch (e) {}
+  document.documentElement.style.setProperty('--tg-safe-top', top + 'px');
+  document.documentElement.style.setProperty('--tg-safe-bottom', bottom + 'px');
+}
+function tgHaptic(kind) {
+  if (!state.settings.haptics) return;
+  if (!tg || !tg.HapticFeedback) return;
+  try {
+    if (kind === 'soft' || kind === 'light' || kind === 'medium' || kind === 'heavy' || kind === 'rigid') {
+      tg.HapticFeedback.impactOccurred(kind === 'soft' ? 'light' : kind);
+    } else if (kind === 'success' || kind === 'warning' || kind === 'error') {
+      tg.HapticFeedback.notificationOccurred(kind);
+    } else if (kind === 'select') {
+      tg.HapticFeedback.selectionChanged();
+    }
+  } catch (e) {}
+}
+function getInitData() { return (tg && tg.initData) || ''; }
+
+let serverHb;
+async function serverHeartbeat() {
+  const initData = getInitData();
+  if (!initData) return;
+  try {
+    await fetch('/api/heartbeat', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ initData, lang: state.settings.lang, streak: state.streak }),
+    });
+  } catch (e) {}
+}
+let serverSaveDebounce;
+async function serverStateSave() {
+  const initData = getInitData();
+  if (!initData) return;
+  clearTimeout(serverSaveDebounce);
+  serverSaveDebounce = setTimeout(async () => {
+    try {
+      await fetch('/api/state/save', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData, patch: state }),
+      });
+    } catch (e) {}
+  }, 1500);
+}
+async function serverStateLoad() {
+  const initData = getInitData();
+  if (!initData) return;
+  try {
+    const r = await fetch('/api/state/load', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ initData }),
+    });
+    const d = await r.json();
+    if (d && d.exists && d.state) {
+      // Server state wins for economy + claim history (anti-cheat)
+      for (const k of Object.keys(d.state)) {
+        if (k === 'settings') continue;
+        state[k] = d.state[k];
+      }
+      try { localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch (e) {}
+      hudUpdate();
+    }
+  } catch (e) {}
+}
+
+/* =========================================================
+   [JS-05] Physics — bodies, gravity, circle-circle solver
+   ========================================================= */
+let bodyId = 0;
+class Body {
+  constructor(x, y, tier) {
+    this.id = ++bodyId;
+    this.x = x; this.y = y;
+    this.px = x; this.py = y;
+    this.vx = (Math.random() - 0.5) * 0.4;
+    this.vy = 0;
+    this.tier = tier;
+    this.r = TIER_RADII[tier];
+    this.angle = (Math.random() - 0.5) * 0.3;
+    this.spin = (Math.random() - 0.5) * 0.04;
+    this.merged = false;
+    this.bornAt = performance.now();
+    this.restingFrames = 0;
+    this.scale = 0.05;     // pop-in
+  }
+}
+
+// World = array of Body. dropPending = the carrier (not yet in world).
+const world = [];
+let carrier = null;
+let carrierLockedUntil = 0;
+
+function rand(min, max) { return min + Math.random() * (max - min); }
+// In daily mode this is seeded by the server's UTC-date seed so every player
+// sees the same drop queue for the day. Endless mode uses Math.random().
+let dailySeed = 0;
+let dailyRng = null;
+let dailyYMD = '';
+function chooseSpawnTier() {
+  const r = (state.mode === 'daily' && dailyRng) ? dailyRng() * 100 : Math.random() * 100;
+  let acc = 0;
+  for (let i = 0; i < SPAWN_TIER_WEIGHTS.length; i++) {
+    acc += SPAWN_TIER_WEIGHTS[i];
+    if (r < acc) return i;
+  }
+  return 0;
+}
+
+async function loadDailySeed() {
+  try {
+    const r = await fetch('/api/daily-seed');
+    const d = await r.json();
+    dailySeed = (d && d.seed) || 1;
+    dailyYMD = (d && d.ymd) || ymd();
+    dailyRng = mulberry32(dailySeed);
+  } catch (e) {
+    dailySeed = 1;
+    dailyYMD = ymd();
+    dailyRng = mulberry32(dailySeed);
+  }
+}
+
+function setMode(m) {
+  state.mode = m;
+  save();
+  // Reset RNG so the queue starts deterministically from the daily seed
+  // even after switching modes mid-session.
+  if (m === 'daily') dailyRng = mulberry32(dailySeed);
+  document.querySelectorAll('.mode-pill').forEach(p => p.classList.toggle('active', p.getAttribute('data-mode') === m));
+  newGame();
+}
+
+function physicsStep() {
+  const dt = 1;                    // fixed step
+  const substep = dt / PHYS_SUBSTEPS;
+  for (let s = 0; s < PHYS_SUBSTEPS; s++) {
+    // Integrate
+    for (const b of world) {
+      if (b.merged) continue;
+      b.vy += GRAVITY * substep;
+      b.vx *= VELOCITY_DAMP;
+      b.vy *= VELOCITY_DAMP;
+      // clamp velocity
+      if (b.vy > MAX_VEL) b.vy = MAX_VEL;
+      if (b.vx > MAX_VEL) b.vx = MAX_VEL;
+      if (b.vx < -MAX_VEL) b.vx = -MAX_VEL;
+      b.x += b.vx * substep;
+      b.y += b.vy * substep;
+      b.angle += b.spin * substep;
+      b.spin *= 0.985;
+      if (b.scale < 1) b.scale = Math.min(1, b.scale + 0.06 * substep);
+    }
+    // Walls + floor
+    for (const b of world) {
+      if (b.merged) continue;
+      if (b.x - b.r < JAR.left)  { b.x = JAR.left + b.r; b.vx = Math.abs(b.vx) * WALL_RESTITUTION; b.spin += b.vy * 0.001; }
+      if (b.x + b.r > JAR.right) { b.x = JAR.right - b.r; b.vx = -Math.abs(b.vx) * WALL_RESTITUTION; b.spin -= b.vy * 0.001; }
+      if (b.y + b.r > JAR.bottom) {
+        b.y = JAR.bottom - b.r;
+        b.vy = -Math.abs(b.vy) * WALL_RESTITUTION;
+        b.vx *= 0.92;
+        b.spin *= 0.85;
+      }
+    }
+    // Body-body collisions (naive O(n²), fine for <80 bodies)
+    const mergeQueue = [];
+    for (let i = 0; i < world.length; i++) {
+      const a = world[i];
+      if (a.merged) continue;
+      for (let j = i + 1; j < world.length; j++) {
+        const c = world[j];
+        if (c.merged) continue;
+        const dx = c.x - a.x, dy = c.y - a.y;
+        const r2 = a.r + c.r;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < r2 * r2 && d2 > 0.0001) {
+          const d = Math.sqrt(d2);
+          const nx = dx / d, ny = dy / d;
+          const pen = r2 - d;
+          // Equal-mass push apart
+          const half = pen * 0.5;
+          a.x -= nx * half; a.y -= ny * half;
+          c.x += nx * half; c.y += ny * half;
+          // Relative velocity along normal
+          const rvx = c.vx - a.vx, rvy = c.vy - a.vy;
+          const vn = rvx * nx + rvy * ny;
+          if (vn < 0) {
+            const e = BALL_RESTITUTION;
+            const j2 = -(1 + e) * vn / 2;
+            const ix = j2 * nx, iy = j2 * ny;
+            a.vx -= ix; a.vy -= iy;
+            c.vx += ix; c.vy += iy;
+            // tiny spin transfer for visual life
+            const tan = -ny * rvx + nx * rvy;
+            a.spin -= tan * 0.0005;
+            c.spin += tan * 0.0005;
+          }
+          // Merge check — same tier, last substep only (avoid double-merge)
+          if (s === PHYS_SUBSTEPS - 1 && a.tier === c.tier && a.tier < TIER_COUNT - 1) {
+            mergeQueue.push([a, c]);
+          } else if (s === PHYS_SUBSTEPS - 1 && a.tier === c.tier && a.tier === TIER_COUNT - 1) {
+            // Two Tsarinas — special pop, both removed, big bonus
+            mergeQueue.push([a, c, true]);
+            markAchievementProgress('tsarina_pair');
+          }
+        }
+      }
+    }
+    // Resolve merges
+    for (const m of mergeQueue) {
+      const [a, c, top] = m;
+      if (a.merged || c.merged) continue;
+      a.merged = true; c.merged = true;
+      const mx = (a.x + c.x) / 2;
+      const my = (a.y + c.y) / 2;
+      const mvx = (a.vx + c.vx) / 2;
+      const mvy = (a.vy + c.vy) / 2;
+      if (top) {
+        // Tsarina × Tsarina = celebration
+        spawnParticles(mx, my, 36, '#fdc500', 1.5);
+        spawnParticles(mx, my, 24, '#a51d30', 1.2);
+        addScore(200);
+        playMergeSound(11);
+        tgHaptic('heavy');
+        kickShake(14);
+      } else {
+        const newTier = a.tier + 1;
+        const nb = new Body(mx, my, newTier);
+        nb.vx = mvx * 0.6;
+        nb.vy = mvy * 0.6;
+        nb.scale = 0.3;
+        nb.spin = (a.spin + c.spin) * 0.5;
+        world.push(nb);
+        // Combo tracking: chained merges within the window multiply score
+        const now = performance.now();
+        if (now - lastMergeAtMs < COMBO_WINDOW_MS) comboCount++;
+        else comboCount = 1;
+        lastMergeAtMs = now;
+        if (comboCount > (state.bestComboEver || 0)) state.bestComboEver = comboCount;
+        if (comboCount >= 5) markAchievementProgress('combo_5');
+        if (comboCount >= 10) markAchievementProgress('combo_10');
+        const mult = comboMultiplier(comboCount);
+        const baseGain = TIER_SCORES[newTier];
+        const gain = Math.round(baseGain * mult);
+        addScore(gain);
+        if (comboCount >= 2) {
+          spawnComboFlash(comboCount, mult);
+          playComboSound(comboCount);
+        }
+        state.totalMergesEver = (state.totalMergesEver || 0) + 1;
+        if (newTier > (state.highestTierSeen || 0)) {
+          state.highestTierSeen = newTier;
+          markTierDot(newTier, true);
+          if (newTier === 5) markMissionProgress('mission_merge_t6_done', true);  // T6 in 0-indexed === idx 5
+        }
+        if (newTier > (state.bestTierEver || 0)) state.bestTierEver = newTier;
+        spawnParticles(mx, my, 10 + newTier * 2, getPalette(newTier).body, 1);
+        spawnFloatScore(mx, my - 8, '+' + gain + (mult > 1 ? '  x' + mult.toFixed(1) : ''));
+        playMergeSound(newTier);
+        tgHaptic(comboCount >= 4 ? 'heavy' : newTier > 5 ? 'medium' : 'light');
+        kickShake(2 + newTier + Math.min(8, comboCount));
+        bounceMascot(1 + Math.min(8, comboCount));
+      }
+    }
+    // Remove merged
+    if (mergeQueue.length) {
+      for (let i = world.length - 1; i >= 0; i--) if (world[i].merged) world.splice(i, 1);
+    }
+  }
+}
+
+/* =========================================================
+   [JS-06] Drawing — canvas-drawn matryoshka, jar, FX
+   ========================================================= */
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const nextCanvas = document.getElementById('next-canvas');
+const nextCtx = nextCanvas.getContext('2d');
+
+let shakeAmp = 0;
+function kickShake(a) { shakeAmp = Math.min(28, Math.max(shakeAmp, a)); }
+
+// Combo state — not persisted across runs; resets on newGame.
+let comboCount = 0;
+let lastMergeAtMs = 0;
+const comboFlashes = [];      // {label, mult, life, max, scale}
+function spawnComboFlash(combo, mult) {
+  const label = COMBO_LABELS[Math.min(8, combo)] || 'CHAIN';
+  comboFlashes.push({ combo, label, mult, life: 60, max: 60, scale: 0.4, rot: (Math.random() - 0.5) * 0.18 });
+}
+function stepComboFlashes() {
+  for (let i = comboFlashes.length - 1; i >= 0; i--) {
+    const f = comboFlashes[i];
+    // Ease-out scale to peak 1.2 then settle to 1
+    const p = 1 - f.life / f.max;
+    if (p < 0.35) f.scale = 0.4 + (1.2 - 0.4) * (p / 0.35);
+    else if (p < 0.55) f.scale = 1.2 - (1.2 - 1) * ((p - 0.35) / 0.20);
+    else f.scale = 1;
+    f.life--;
+    if (f.life <= 0) comboFlashes.splice(i, 1);
+  }
+}
+function drawComboFlashes() {
+  for (const f of comboFlashes) {
+    const p = 1 - f.life / f.max;
+    const alpha = p < 0.85 ? 1 : (1 - (p - 0.85) / 0.15);
+    ctx.save();
+    ctx.translate(canvas.width / 2, 200);
+    ctx.rotate(f.rot * (1 - p));
+    ctx.scale(f.scale, f.scale);
+    ctx.globalAlpha = alpha;
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 38px -apple-system, system-ui, sans-serif';
+    // Thick stroke + filled letters in escalating color
+    const col = f.combo >= 6 ? '#fdc500' : f.combo >= 4 ? '#f72585' : '#a51d30';
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 6;
+    ctx.strokeText(f.label, 0, 0);
+    ctx.fillStyle = col; ctx.fillText(f.label, 0, 0);
+    ctx.font = 'bold 18px sans-serif';
+    ctx.strokeText('x' + f.mult.toFixed(1) + '  ' + f.combo + ' CHAIN', 0, 28);
+    ctx.fillStyle = col; ctx.fillText('x' + f.mult.toFixed(1) + '  ' + f.combo + ' CHAIN', 0, 28);
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawJar() {
+  // Wood-grain backplate
+  const grad = ctx.createLinearGradient(0, JAR.top - 30, 0, JAR.bottom + 30);
+  grad.addColorStop(0, '#fff8e2');
+  grad.addColorStop(1, '#f5e2b3');
+  ctx.fillStyle = grad;
+  roundRect(ctx, JAR.left - 6, JAR.top - 28, JAR.right - JAR.left + 12, JAR.bottom - JAR.top + 34, 22);
+  ctx.fill();
+
+  // Inner jar floor accent
+  ctx.fillStyle = 'rgba(0,0,0,0.04)';
+  ctx.fillRect(JAR.left, JAR.bottom - 18, JAR.right - JAR.left, 18);
+
+  // Death line (subtle dashed)
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,84,112,0.55)';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([6, 4]);
+  ctx.beginPath();
+  ctx.moveTo(JAR.left + 8, JAR.deathLineY);
+  ctx.lineTo(JAR.right - 8, JAR.deathLineY);
+  ctx.stroke();
+  ctx.restore();
+
+  // Jar rim (top edge gold)
+  ctx.strokeStyle = JAR.left ? '#e7b53b' : '#fff';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(JAR.left - 6, JAR.top - 2);
+  ctx.lineTo(JAR.right + 6, JAR.top - 2);
+  ctx.stroke();
+
+  // Border outline
+  ctx.strokeStyle = '#b88317';
+  ctx.lineWidth = 2;
+  roundRect(ctx, JAR.left - 6, JAR.top - 28, JAR.right - JAR.left + 12, JAR.bottom - JAR.top + 34, 22);
+  ctx.stroke();
+}
+
+function roundRect(c, x, y, w, h, r) {
+  c.beginPath();
+  c.moveTo(x + r, y);
+  c.lineTo(x + w - r, y);
+  c.quadraticCurveTo(x + w, y, x + w, y + r);
+  c.lineTo(x + w, y + h - r);
+  c.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  c.lineTo(x + r, y + h);
+  c.quadraticCurveTo(x, y + h, x, y + h - r);
+  c.lineTo(x, y + r);
+  c.quadraticCurveTo(x, y, x + r, y);
+  c.closePath();
+}
+
+function drawMatryoshka(c, x, y, r, tier, angle, scale) {
+  const pal = getPalette(tier);
+  c.save();
+  c.translate(x, y);
+  c.rotate(angle || 0);
+  if (scale) c.scale(scale, scale);
+
+  // Drop shadow
+  c.fillStyle = 'rgba(0,0,0,0.18)';
+  c.beginPath();
+  c.ellipse(0, r * 0.85, r * 0.85, r * 0.18, 0, 0, Math.PI * 2);
+  c.fill();
+
+  // Body silhouette (egg-ish: wider at bottom, narrow at top)
+  c.fillStyle = pal.body;
+  c.beginPath();
+  c.ellipse(0, 0, r * 0.95, r, 0, 0, Math.PI * 2);
+  c.fill();
+
+  // Apron (front panel)
+  c.fillStyle = pal.apron;
+  c.beginPath();
+  c.ellipse(0, r * 0.18, r * 0.7, r * 0.62, 0, 0, Math.PI * 2);
+  c.fill();
+
+  // Scarf (top portion arc)
+  c.fillStyle = pal.scarf;
+  c.beginPath();
+  c.moveTo(-r * 0.95, -r * 0.05);
+  c.quadraticCurveTo(0, -r * 1.15, r * 0.95, -r * 0.05);
+  c.quadraticCurveTo(r * 0.4, -r * 0.5, 0, -r * 0.45);
+  c.quadraticCurveTo(-r * 0.4, -r * 0.5, -r * 0.95, -r * 0.05);
+  c.fill();
+
+  // Face oval (under scarf)
+  c.fillStyle = pal.face;
+  c.beginPath();
+  c.ellipse(0, -r * 0.4, r * 0.36, r * 0.28, 0, 0, Math.PI * 2);
+  c.fill();
+
+  // Eyes
+  c.fillStyle = pal.accent;
+  c.beginPath();
+  c.ellipse(-r * 0.13, -r * 0.4, r * 0.04, r * 0.06, 0, 0, Math.PI * 2);
+  c.ellipse(r * 0.13, -r * 0.4, r * 0.04, r * 0.06, 0, 0, Math.PI * 2);
+  c.fill();
+
+  // Cheeks
+  c.fillStyle = 'rgba(231,57,57,0.55)';
+  c.beginPath();
+  c.ellipse(-r * 0.20, -r * 0.32, r * 0.06, r * 0.05, 0, 0, Math.PI * 2);
+  c.ellipse(r * 0.20, -r * 0.32, r * 0.06, r * 0.05, 0, 0, Math.PI * 2);
+  c.fill();
+
+  // Mouth
+  c.strokeStyle = pal.accent;
+  c.lineWidth = Math.max(1, r * 0.025);
+  c.beginPath();
+  c.arc(0, -r * 0.30, r * 0.08, 0.1 * Math.PI, 0.9 * Math.PI);
+  c.stroke();
+
+  // Apron floral motif (size-dependent: only on T3+)
+  if (tier >= 2) {
+    c.fillStyle = pal.scarf;
+    const fr = r * 0.13;
+    c.beginPath();
+    c.arc(0, r * 0.22, fr, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = pal.accent;
+    c.beginPath();
+    c.arc(0, r * 0.22, fr * 0.5, 0, Math.PI * 2);
+    c.fill();
+    // petals
+    if (tier >= 4) {
+      c.fillStyle = pal.body;
+      for (let i = 0; i < 5; i++) {
+        const a = i * (Math.PI * 2 / 5) - Math.PI / 2;
+        c.beginPath();
+        c.ellipse(Math.cos(a) * fr * 1.4, r * 0.22 + Math.sin(a) * fr * 1.4,
+          fr * 0.5, fr * 0.3, a + Math.PI / 2, 0, Math.PI * 2);
+        c.fill();
+      }
+      c.fillStyle = pal.scarf;
+      c.beginPath(); c.arc(0, r * 0.22, fr * 0.55, 0, Math.PI * 2); c.fill();
+      c.fillStyle = pal.accent;
+      c.beginPath(); c.arc(0, r * 0.22, fr * 0.25, 0, Math.PI * 2); c.fill();
+    }
+  }
+
+  // Body outline
+  c.strokeStyle = pal.accent;
+  c.lineWidth = Math.max(1, r * 0.03);
+  c.beginPath();
+  c.ellipse(0, 0, r * 0.95, r, 0, 0, Math.PI * 2);
+  c.stroke();
+
+  // Scarf outline edge
+  c.beginPath();
+  c.moveTo(-r * 0.95, -r * 0.05);
+  c.quadraticCurveTo(-r * 0.4, -r * 0.5, 0, -r * 0.45);
+  c.quadraticCurveTo(r * 0.4, -r * 0.5, r * 0.95, -r * 0.05);
+  c.stroke();
+
+  // Crown for Tsarina
+  if (pal.crown) {
+    c.fillStyle = '#fdc500';
+    c.beginPath();
+    c.moveTo(-r * 0.35, -r * 0.95);
+    c.lineTo(-r * 0.22, -r * 1.18);
+    c.lineTo(-r * 0.08, -r * 1.02);
+    c.lineTo(0, -r * 1.22);
+    c.lineTo(r * 0.08, -r * 1.02);
+    c.lineTo(r * 0.22, -r * 1.18);
+    c.lineTo(r * 0.35, -r * 0.95);
+    c.closePath();
+    c.fill();
+    c.strokeStyle = '#b88317';
+    c.stroke();
+    // jewel
+    c.fillStyle = '#e63946';
+    c.beginPath();
+    c.arc(0, -r * 1.05, r * 0.05, 0, Math.PI * 2);
+    c.fill();
+  }
+
+  c.restore();
+}
+
+// Particles
+const particles = [];
+function spawnParticles(x, y, n, color, intensity) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const s = (1 + Math.random() * 2.4) * (intensity || 1);
+    particles.push({
+      x, y,
+      vx: Math.cos(a) * s, vy: Math.sin(a) * s - 0.6,
+      life: 32 + Math.random() * 22,
+      max: 32 + Math.random() * 22,
+      color,
+      r: 1.5 + Math.random() * 2.5,
+    });
+  }
+}
+function stepParticles() {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.vy += 0.16;
+    p.x += p.vx; p.y += p.vy;
+    p.vx *= 0.99; p.vy *= 0.99;
+    p.life--;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+}
+function drawParticles() {
+  for (const p of particles) {
+    ctx.globalAlpha = Math.max(0, p.life / p.max);
+    ctx.fillStyle = p.color;
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// Floating score popups
+const floats = [];
+function spawnFloatScore(x, y, text) {
+  floats.push({ x, y, text, life: 38, max: 38 });
+}
+function stepFloats() {
+  for (let i = floats.length - 1; i >= 0; i--) {
+    const f = floats[i];
+    f.y -= 0.9; f.life--;
+    if (f.life <= 0) floats.splice(i, 1);
+  }
+}
+function drawFloats() {
+  ctx.save();
+  ctx.font = 'bold 18px -apple-system, system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  for (const f of floats) {
+    const a = f.life / f.max;
+    ctx.globalAlpha = a;
+    ctx.fillStyle = '#a51d30';
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 3;
+    ctx.strokeText(f.text, f.x, f.y);
+    ctx.fillText(f.text, f.x, f.y);
+  }
+  ctx.restore();
+  ctx.globalAlpha = 1;
+}
+
+/* =========================================================
+   [JS-07] Game loop — tick + render
+   ========================================================= */
+let running = true;
+let score = 0;
+let mergeCount = 0;
+let lastTickMs = 0;
+
+function addScore(n) {
+  score += n;
+  mergeCount++;
+  document.getElementById('cur-score').textContent = score;
+  document.getElementById('merge-count').textContent = mergeCount;
+}
+
+function render() {
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  // Shake offset
+  let ox = 0, oy = 0;
+  if (shakeAmp > 0.1) {
+    ox = (Math.random() - 0.5) * shakeAmp;
+    oy = (Math.random() - 0.5) * shakeAmp;
+    shakeAmp *= 0.84;
+  }
+  ctx.save();
+  ctx.translate(ox, oy);
+
+  drawJar();
+
+  // Sort by tier so larger draw on top (more satisfying)
+  const drawList = world.slice().sort((a, b) => a.tier - b.tier);
+  for (const b of drawList) {
+    drawMatryoshka(ctx, b.x, b.y, b.r, b.tier, b.angle, b.scale);
+  }
+
+  // Carrier doll preview at top
+  if (carrier) {
+    ctx.globalAlpha = 0.86;
+    drawMatryoshka(ctx, carrier.x, carrier.y, carrier.r, carrier.tier, 0, 1);
+    ctx.globalAlpha = 1;
+    // dotted drop line
+    ctx.save();
+    ctx.strokeStyle = 'rgba(165,29,48,0.4)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 5]);
+    ctx.beginPath();
+    ctx.moveTo(carrier.x, carrier.y + carrier.r + 2);
+    ctx.lineTo(carrier.x, JAR.bottom - 4);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  drawParticles();
+  drawFloats();
+  drawComboFlashes();
+
+  ctx.restore();
+}
+
+function gameTick() {
+  if (running) {
+    physicsStep();
+    stepParticles();
+    stepFloats();
+    stepComboFlashes();
+    stepMascot();
+    // Combo timeout — reset count if window expired
+    if (comboCount > 0 && (performance.now() - lastMergeAtMs) > COMBO_WINDOW_MS) {
+      comboCount = 0;
+    }
+    checkGameOver();
+  }
+  render();
+  requestAnimationFrame(gameTick);
+}
+
+/* =========================================================
+   [JS-08] Drop UX — pointer drag carrier, drop on release
+   ========================================================= */
+let nextTier = chooseSpawnTier();
+function spawnCarrier() {
+  const tier = nextTier;
+  nextTier = chooseSpawnTier();
+  const r = TIER_RADII[tier];
+  // Carrier hovers above jar at y just above top, x = last cursor or center
+  const x = clamp(lastDropX || (JAR.left + JAR.right) / 2, JAR.left + r + 4, JAR.right - r - 4);
+  const y = Math.max(40, JAR.top - r - 6);
+  carrier = { x, y, r, tier };
+  markTierDot(tier, false);
+  renderNext();
+}
+function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+
+let lastDropX = 0;
+let pointerDown = false;
+
+function onPointer(e) {
+  if (!carrier) return;
+  if (performance.now() < carrierLockedUntil) return;
+  const rect = canvas.getBoundingClientRect();
+  const xRaw = (e.clientX - rect.left) * (canvas.width / rect.width);
+  carrier.x = clamp(xRaw, JAR.left + carrier.r + 4, JAR.right - carrier.r - 4);
+  lastDropX = carrier.x;
+}
+function onPointerDown(e) {
+  if (!running || !carrier) return;
+  if (performance.now() < carrierLockedUntil) return;
+  pointerDown = true;
+  onPointer(e);
+}
+function onPointerUp(e) {
+  if (!running || !carrier) return;
+  if (!pointerDown) return;
+  if (performance.now() < carrierLockedUntil) return;
+  pointerDown = false;
+  onPointer(e);
+  doDrop();
+}
+
+// Undo: snapshot the world right before each drop so a single Undo can
+// remove the dropped doll AND restore any merges it triggered.
+let undoSnapshot = null;
+function snapshotWorld() {
+  return {
+    world: world.map(b => ({
+      id: b.id, x: b.x, y: b.y, vx: b.vx, vy: b.vy, tier: b.tier, r: b.r,
+      angle: b.angle, spin: b.spin, scale: b.scale, restingFrames: b.restingFrames,
+    })),
+    score, mergeCount, nextTier,
+    highestTierSeen: state.highestTierSeen, bestTierEver: state.bestTierEver,
+    totalMergesEver: state.totalMergesEver,
+  };
+}
+function restoreSnapshot(snap) {
+  if (!snap) return;
+  world.length = 0;
+  for (const b of snap.world) {
+    const nb = new Body(b.x, b.y, b.tier);
+    nb.id = b.id; nb.vx = b.vx; nb.vy = b.vy; nb.angle = b.angle;
+    nb.spin = b.spin; nb.scale = b.scale; nb.restingFrames = b.restingFrames;
+    world.push(nb);
+  }
+  score = snap.score; mergeCount = snap.mergeCount; nextTier = snap.nextTier;
+  state.highestTierSeen = snap.highestTierSeen;
+  state.bestTierEver = snap.bestTierEver;
+  state.totalMergesEver = snap.totalMergesEver;
+  document.getElementById('cur-score').textContent = score;
+  document.getElementById('merge-count').textContent = mergeCount;
+  resetTierDots();
+  renderNext();
+}
+function updateUndoButton() {
+  const btn = document.getElementById('btn-undo');
+  if (!btn) return;
+  const canUndo = !!undoSnapshot && (state.undos || 0) > 0 && running;
+  btn.style.display = canUndo ? 'inline-flex' : 'none';
+}
+
+function doDrop() {
+  if (!carrier) return;
+  // Snapshot for one-step undo. Skip in daily mode so the seeded queue
+  // can't be cheesed by drop-and-undo.
+  if (state.mode !== 'daily') undoSnapshot = snapshotWorld();
+  else undoSnapshot = null;
+  const b = new Body(carrier.x, carrier.y, carrier.tier);
+  b.scale = 1;
+  b.vy = 0;
+  world.push(b);
+  tgHaptic('soft');
+  playDropSound();
+  carrier = null;
+  carrierLockedUntil = performance.now() + 420;
+  setTimeout(() => { if (running) { spawnCarrier(); updateUndoButton(); } }, 420);
+}
+
+function doUndo() {
+  if (!undoSnapshot) { toast(t('no_undo')); return; }
+  if ((state.undos || 0) <= 0) { toast(t('no_undos_left')); return; }
+  state.undos--;
+  restoreSnapshot(undoSnapshot);
+  undoSnapshot = null;
+  carrier = null;
+  carrierLockedUntil = performance.now() + 200;
+  setTimeout(() => { if (running) spawnCarrier(); }, 200);
+  updateUndoButton();
+  save();
+  toast(t('undo_used') + ' (' + state.undos + ')');
+  tgHaptic('light');
+}
+
+canvas.addEventListener('pointerdown', onPointerDown, { passive: false });
+canvas.addEventListener('pointermove', (e) => { if (pointerDown) onPointer(e); }, { passive: false });
+canvas.addEventListener('pointerup', onPointerUp, { passive: false });
+canvas.addEventListener('pointercancel', onPointerUp, { passive: false });
+
+document.getElementById('btn-undo').addEventListener('click', doUndo);
+document.querySelectorAll('.mode-pill').forEach(p => {
+  p.addEventListener('click', () => setMode(p.getAttribute('data-mode')));
+});
+
+// Prevent default touch behavior on the canvas
+canvas.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
+canvas.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+
+function renderNext() {
+  const c = nextCtx;
+  c.clearRect(0, 0, nextCanvas.width, nextCanvas.height);
+  const r = Math.min(nextCanvas.width, nextCanvas.height) * 0.36;
+  drawMatryoshka(c, nextCanvas.width / 2, nextCanvas.height / 2 + 2, r, nextTier, 0, 1);
+}
+
+/* =========================================================
+   [JS-08b] Mascot — corner reactive doll
+   ========================================================= */
+// A T7-ish doll character drawn into its own offscreen canvas. Idle bob
+// from a sin wave; bounceMascot(amount) pushes a squash-stretch impulse;
+// game-over rotates slightly. Tap = encourage bubble.
+const mascotCanvas = document.getElementById('mascot-canvas');
+const mascotCtx = mascotCanvas.getContext('2d');
+const mascotBubble = document.getElementById('mascot-bubble');
+let mascotPhase = 0;
+let mascotSquash = 0;          // 0..1, decays each frame
+let mascotMood = 'happy';      // 'happy' | 'wow' | 'sad'
+let mascotMsg = '';
+let mascotMsgUntil = 0;
+
+const MASCOT_LINES = {
+  intro:    ['Let\'s drop some dolls! 🪆', 'Aim and release!', 'I\'m cheering for you!'],
+  combo:    ['NICE!', 'WOW!', 'KEEP GOING!', '🔥'],
+  gameover: ['Так бывает!', 'One more!', 'Don\'t give up!', 'Try again!'],
+  cheer:    ['You got this!', 'Smooth drop!', 'Let\'s GO!'],
+};
+
+function showMascotBubble(msg, durMs) {
+  mascotMsg = msg;
+  mascotMsgUntil = performance.now() + (durMs || 1800);
+  mascotBubble.textContent = msg;
+  mascotBubble.classList.add('show');
+}
+function hideMascotBubble() {
+  mascotBubble.classList.remove('show');
+  mascotMsg = '';
+}
+function bounceMascot(amount) {
+  mascotSquash = Math.min(1, mascotSquash + 0.18 + (amount || 1) * 0.03);
+  mascotMood = 'wow';
+  if (Math.random() < 0.18) {
+    const arr = MASCOT_LINES.combo;
+    showMascotBubble(arr[Math.floor(Math.random() * arr.length)], 1200);
+  }
+}
+function setMascotMood(m) { mascotMood = m; }
+
+function stepMascot() {
+  mascotPhase += 0.05;
+  mascotSquash *= 0.92;
+  if (mascotMsgUntil && performance.now() > mascotMsgUntil) {
+    hideMascotBubble();
+    mascotMsgUntil = 0;
+  }
+  // Decay mood back to happy after the wow impulse fades
+  if (mascotMood === 'wow' && mascotSquash < 0.05) mascotMood = 'happy';
+  drawMascot();
+}
+
+function drawMascot() {
+  const c = mascotCtx;
+  const W = mascotCanvas.width, H = mascotCanvas.height;
+  c.clearRect(0, 0, W, H);
+  const bob = Math.sin(mascotPhase) * 1.6;
+  const squash = mascotSquash;
+  // The mascot is a T7-ish doll. Body radius scaled for the small canvas.
+  const r = 26;
+  const tier = 6;  // Grandma — warmer color, reads well
+  // Squash-stretch: shrink height + widen on squash
+  c.save();
+  c.translate(W / 2, H - r - 6 + bob);
+  // tilt slightly for game-over mood
+  if (mascotMood === 'sad') c.rotate(-0.18);
+  c.scale(1 + squash * 0.25, 1 - squash * 0.30);
+  // Use the same drawing function but call with offset (it draws around 0,0)
+  drawMatryoshka(c, 0, 0, r, tier, 0, 1);
+  c.restore();
+  // Big "Wow" eye blink — overlay sparkle when mascotMood = wow
+  if (mascotMood === 'wow') {
+    c.fillStyle = '#fdc500';
+    c.font = 'bold 16px sans-serif';
+    c.textAlign = 'center';
+    c.fillText('✨', W / 2 - 14, 18);
+    c.fillText('✨', W / 2 + 14, 22);
+  }
+}
+
+document.getElementById('mascot-canvas').addEventListener('click', () => {
+  const arr = MASCOT_LINES.cheer;
+  showMascotBubble(arr[Math.floor(Math.random() * arr.length)], 1500);
+  tgHaptic('select');
+});
+
+/* =========================================================
+   [JS-09] Audio — AudioContext synth
+   ========================================================= */
+let audioCtx = null;
+function audio() {
+  if (!state.settings.sound) return null;
+  if (!audioCtx) {
+    try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+    catch (e) { return null; }
+  }
+  return audioCtx;
+}
+function tone(freq, dur, type, gain, attack) {
+  const ac = audio(); if (!ac) return;
+  const o = ac.createOscillator();
+  const g = ac.createGain();
+  o.type = type || 'sine';
+  o.frequency.value = freq;
+  o.connect(g); g.connect(ac.destination);
+  const t0 = ac.currentTime;
+  g.gain.setValueAtTime(0, t0);
+  g.gain.linearRampToValueAtTime(gain || 0.12, t0 + (attack || 0.005));
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.start(t0); o.stop(t0 + dur + 0.02);
+}
+function playDropSound() {
+  tone(220 + Math.random() * 40, 0.08, 'sine', 0.08);
+}
+function playMergeSound(tier) {
+  const f = 240 + tier * 60;
+  tone(f, 0.12, 'triangle', 0.14);
+  setTimeout(() => tone(f * 1.5, 0.18, 'sine', 0.10), 50);
+}
+function playGameOverSound() {
+  tone(200, 0.3, 'sawtooth', 0.12);
+  setTimeout(() => tone(150, 0.35, 'sawtooth', 0.12), 120);
+  setTimeout(() => tone(110, 0.5, 'sawtooth', 0.12), 280);
+}
+function playClaimSound() {
+  tone(660, 0.1, 'triangle', 0.13);
+  setTimeout(() => tone(880, 0.12, 'triangle', 0.13), 80);
+  setTimeout(() => tone(1320, 0.18, 'triangle', 0.13), 180);
+}
+// Combo sound: rising arpeggio whose top note climbs with the combo count.
+function playComboSound(combo) {
+  const base = 440 + combo * 40;
+  tone(base, 0.07, 'triangle', 0.12);
+  setTimeout(() => tone(base * 1.25, 0.08, 'triangle', 0.12), 50);
+  setTimeout(() => tone(base * 1.5, 0.10, 'triangle', 0.13), 110);
+  if (combo >= 4) setTimeout(() => tone(base * 2, 0.14, 'sine', 0.13), 180);
+}
+
+/* =========================================================
+   [JS-10] Game over detection
+   ========================================================= */
+function checkGameOver() {
+  for (const b of world) {
+    if (b.merged) continue;
+    const isResting = Math.abs(b.vy) < 0.35 && Math.abs(b.vx) < 0.6;
+    const isAboveLine = b.y - b.r * 0.4 < JAR.deathLineY;
+    if (isResting && isAboveLine) {
+      b.restingFrames++;
+      if (b.restingFrames > DEATH_FRAMES) {
+        endGame();
+        return;
+      }
+    } else {
+      b.restingFrames = 0;
+    }
+  }
+}
+
+function endGame() {
+  if (!running) return;
+  running = false;
+  carrier = null;
+  tgHaptic('error');
+  playGameOverSound();
+  setMascotMood('sad');
+  const arr = MASCOT_LINES.gameover;
+  showMascotBubble(arr[Math.floor(Math.random() * arr.length)], 2500);
+  state.totalGamesEver = (state.totalGamesEver || 0) + 1;
+  state.gamesPlayedToday = (state.gamesPlayedToday || 0) + 1;
+  state.gamesPlayedYMD = ymd();
+  bumpStreakIfNeeded();
+  let wasBest;
+  if (state.mode === 'daily') {
+    if (state.dailyYMD !== dailyYMD) {
+      state.dailyYMD = dailyYMD; state.dailyBestToday = 0;
+    }
+    wasBest = score > (state.dailyBestToday || 0);
+    if (wasBest) state.dailyBestToday = score;
+    state.lastDailyYMD = dailyYMD;
+  } else {
+    wasBest = score > (state.best || 0);
+    if (wasBest) state.best = score;
+  }
+  document.getElementById('best-score').textContent = state.mode === 'daily' ? (state.dailyBestToday || 0) : (state.best || 0);
+  checkAchievements();
+  save();
+  submitScore(score);
+  setTimeout(() => showGameOverModal(wasBest), 350);
+}
+
+function showGameOverModal(wasBest) {
+  const canRevive = (state.revives || 0) > 0;
+  const body = document.getElementById('modal-body');
+  body.innerHTML = `
+    <h3>${wasBest ? '🎉 ' + t('new_high') : t('game_over')}</h3>
+    <div class="big">${score}</div>
+    <div class="sub">${t('your_best')}: ${state.best}</div>
+    <div class="modal-btns">
+      ${canRevive ? `<button class="btn revive" id="m-revive">🟢 ${t('use_revive')} (${state.revives})</button>` : ''}
+      <button class="btn" id="m-newgame">🪆 ${t('play_again')}</button>
+      <button class="btn ghost" id="m-share">📤 Share</button>
+    </div>
+  `;
+  document.getElementById('modal-shade').classList.add('show');
+  if (canRevive) {
+    document.getElementById('m-revive').onclick = () => {
+      state.revives--;
+      save();
+      hideModal();
+      doRevive();
+    };
+  }
+  document.getElementById('m-newgame').onclick = () => { hideModal(); newGame(); };
+  document.getElementById('m-share').onclick = () => shareScore();
+}
+
+function doRevive() {
+  // Clear the top 3 dolls that are highest in the jar
+  const sorted = world.slice().sort((a, b) => a.y - b.y);
+  const toClear = sorted.slice(0, 3);
+  for (const b of toClear) {
+    spawnParticles(b.x, b.y, 22, getPalette(b.tier).body, 1.2);
+    b.merged = true;
+  }
+  for (let i = world.length - 1; i >= 0; i--) if (world[i].merged) world.splice(i, 1);
+  // Reset resting frames on remaining
+  for (const b of world) b.restingFrames = 0;
+  running = true;
+  carrier = null;
+  spawnCarrier();
+  toast(t('revive_used'));
+}
+
+function newGame() {
+  world.length = 0;
+  particles.length = 0;
+  floats.length = 0;
+  comboFlashes.length = 0;
+  comboCount = 0;
+  lastMergeAtMs = 0;
+  undoSnapshot = null;
+  setMascotMood('happy');
+  score = 0; mergeCount = 0;
+  document.getElementById('cur-score').textContent = 0;
+  document.getElementById('merge-count').textContent = 0;
+  shakeAmp = 0;
+  running = true;
+  // Daily mode: reset PRNG so the queue starts deterministically from the
+  // current daily seed.
+  if (state.mode === 'daily') dailyRng = mulberry32(dailySeed);
+  nextTier = chooseSpawnTier();
+  spawnCarrier();
+  resetTierDots();
+  hudUpdate();
+}
+
+/* =========================================================
+   [JS-11] HUD + tier dots
+   ========================================================= */
+function hudUpdate() {
+  document.getElementById('gems-count').textContent = state.gems || 0;
+  document.getElementById('streak-count').textContent = state.streak || 0;
+  document.getElementById('best-score').textContent = state.mode === 'daily'
+    ? (state.dailyYMD === dailyYMD ? (state.dailyBestToday || 0) : 0)
+    : (state.best || 0);
+  // Apply currently-active mode pill in case it loaded from save
+  document.querySelectorAll('.mode-pill').forEach(p => p.classList.toggle('active', p.getAttribute('data-mode') === (state.mode || 'endless')));
+  updateUndoButton();
+}
+
+function buildTierDots() {
+  const dock = document.getElementById('tiers-dock');
+  dock.innerHTML = '';
+  for (let i = 0; i < TIER_COUNT; i++) {
+    const d = document.createElement('div');
+    d.className = 'tier-dot';
+    d.style.background = getPalette(i).body;
+    d.title = (STRINGS[state.settings.lang]?.tier_names || STRINGS.en.tier_names)[i];
+    dock.appendChild(d);
+  }
+  resetTierDots();
+}
+function resetTierDots() {
+  document.querySelectorAll('.tier-dot').forEach((d, i) => {
+    d.classList.toggle('seen', i <= (state.highestTierSeen || 0));
+    d.classList.remove('new');
+  });
+}
+function markTierDot(tier, pop) {
+  const dock = document.getElementById('tiers-dock');
+  const d = dock.children[tier];
+  if (!d) return;
+  d.classList.add('seen');
+  if (pop) {
+    d.classList.remove('new');
+    void d.offsetWidth;
+    d.classList.add('new');
+  }
+}
+
+/* =========================================================
+   [JS-12] Tabs
+   ========================================================= */
+function switchTab(name) {
+  document.querySelectorAll('.tab-view').forEach(v => v.classList.toggle('active', v.getAttribute('data-view') === name));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-tab') === name));
+  state.activeTab = name;
+  save();
+  if (name === 'shop') renderShop();
+  if (name === 'earn') {
+    renderBattlePassBanner();
+    fetchTournament();
+    renderChest();
+    renderMilestones();
+    renderMissions();
+    renderAchievements();
+    fetchLeaderboard(currentLbMode);
+  }
+  if (name === 'home') setTimeout(fitCanvas, 30);
+  tgHaptic('select');
+}
+document.querySelectorAll('.tab-btn').forEach(b => {
+  b.onclick = () => switchTab(b.getAttribute('data-tab'));
+});
+
+/* =========================================================
+   [JS-13] Shop
+   ========================================================= */
+const SKU_DISPLAY = [
+  { id: 'starter_pack',  icon: '🎁', price: 199, feature: true,
+    title_key: 'Starter Pack', desc: '1,500 gems + 3 revives + Khokhloma skin' },
+  { id: 'revive',        icon: '🟢', price: 30,
+    title_key: 'Continue · Revive', desc: 'Clear top 3 dolls, keep your run' },
+  { id: 'preview_pack',  icon: '🔭', price: 50,
+    title_key: 'Next-Doll Previews ×10', desc: 'See 2 dolls ahead for 10 drops' },
+  { id: 'undo_pack',     icon: '↩️', price: 60,
+    title_key: 'Undo Pack ×5', desc: 'Take back your last drop, 5 times' },
+  { id: 'gems_small',    icon: '💎', price: 99,
+    title_key: '500 Gems', desc: 'Small pile of gems' },
+  { id: 'gems_big',      icon: '💰', price: 399,
+    title_key: '3,500 Gems', desc: 'Bigger savings' },
+  { id: 'gems_mega',     icon: '🏦', price: 750,
+    title_key: '12,000 Gems', desc: 'Maximum value' },
+  { id: 'skin_khokhloma',icon: '🎨', price: 150,
+    title_key: 'Khokhloma Skin', desc: 'Black-gold lacquer art' },
+  { id: 'skin_gzhel',    icon: '🟦', price: 150,
+    title_key: 'Gzhel Skin', desc: 'Cobalt porcelain pattern' },
+  { id: 'skin_neon',     icon: '⚡', price: 200,
+    title_key: 'Neon Skin', desc: 'Glowing cyber dolls' },
+  { id: 'skin_wood',     icon: '🪵', price: 200,
+    title_key: 'Wood Skin', desc: 'Hand-carved natural wood' },
+  { id: 'streak_shield', icon: '🛡', price: 99,
+    title_key: 'Streak Shield', desc: '7-day streak insurance' },
+  { id: 'battle_pass',   icon: '🎟', price: 500,
+    title_key: 'Season Pass · 30 days', desc: '2× daily rewards + skin + bonus' },
+];
+
+function renderShop() {
+  const grid = document.getElementById('sku-grid');
+  grid.innerHTML = '';
+  for (const s of SKU_DISPLAY) {
+    const card = document.createElement('div');
+    card.className = 'sku-card' + (s.feature ? ' feature' : '');
+    card.innerHTML = `
+      <div class="sku-icon">${s.icon}</div>
+      <div class="sku-title">${s.title_key}</div>
+      <div class="sku-desc">${s.desc}</div>
+      <button class="sku-buy" data-sku="${s.id}">${s.price} <span class="star">⭐</span></button>
+    `;
+    grid.appendChild(card);
+  }
+  grid.querySelectorAll('.sku-buy').forEach(b => {
+    b.onclick = () => buySku(b.getAttribute('data-sku'));
+  });
+}
+
+async function buySku(sku) {
+  const initData = getInitData();
+  if (!initData || !tg) { toast(t('iap_unavailable')); return; }
+  try {
+    const r = await fetch('/api/create-invoice', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sku, initData }),
+    });
+    const d = await r.json();
+    if (!d.link) { toast(d.error || 'IAP error'); return; }
+    tg.openInvoice(d.link, async (status) => {
+      if (status === 'paid') {
+        // Poll for the grant payload
+        for (let i = 0; i < 6; i++) {
+          await sleep(400);
+          const rr = await fetch('/api/poll-purchases', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ initData }),
+          });
+          const dd = await rr.json();
+          if (dd.purchases && dd.purchases.length) {
+            for (const p of dd.purchases) applyGrant(p.grant);
+            break;
+          }
+        }
+        toast(t('purchase_success'));
+        state.totalIapsEver = (state.totalIapsEver || 0) + 1;
+        save();
+        hudUpdate();
+        tgHaptic('success');
+      } else if (status === 'failed') {
+        toast('Payment failed');
+      }
+    });
+  } catch (e) { toast('Network error'); }
+}
+
+function applyGrant(g) {
+  if (!g) return;
+  if (g.gems)     state.gems     = (state.gems     || 0) + g.gems;
+  if (g.revives)  state.revives  = (state.revives  || 0) + g.revives;
+  if (g.previews) state.previews = (state.previews || 0) + g.previews;
+  if (g.undos)    state.undos    = (state.undos    || 0) + g.undos;
+  if (g.shieldDays) state.shieldDays = (state.shieldDays || 0) + g.shieldDays;
+  if (g.skins) { state.skins = Array.from(new Set([...(state.skins || []), ...g.skins])); }
+  if (g.battlePass) state.battlePassUntil = Date.now() + g.battlePass * 86400000;
+  // Tournament prize payload — surface a celebratory toast / modal
+  if (g.tournamentPrize) {
+    const tp = g.tournamentPrize;
+    setTimeout(() => {
+      const body = document.getElementById('modal-body');
+      body.innerHTML = `
+        <h3>🏆 Tournament #${tp.rank}!</h3>
+        <div class="big">+${tp.prize} 💎</div>
+        <div class="sub">Weekly tournament ${escapeHtml(tp.id || '')}</div>
+        <div class="modal-btns"><button class="btn" id="m-tp-close">Nice!</button></div>
+      `;
+      document.getElementById('modal-shade').classList.add('show');
+      document.getElementById('m-tp-close').onclick = hideModal;
+      tgHaptic('success');
+      playClaimSound();
+    }, 400);
+  }
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+/* =========================================================
+   [JS-14] Earn — daily chest + missions
+   ========================================================= */
+const CHEST_REWARDS = [25, 50, 75, 100, 150, 250, 500];
+
+function ymd() {
+  const d = new Date();
+  return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0') + '-' + String(d.getUTCDate()).padStart(2, '0');
+}
+function ymdYesterday() {
+  const d = new Date(Date.now() - 86400000);
+  return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0') + '-' + String(d.getUTCDate()).padStart(2, '0');
+}
+function chestDayForToday() {
+  const today = ymd();
+  if (state.chestClaimedYMD === today) return state.chestDay;
+  if (state.chestClaimedYMD === ymdYesterday()) {
+    return Math.min(7, (state.chestDay || 0) + 1);
+  }
+  return 1;   // missed a day or first time
+}
+
+function renderChest() {
+  const row = document.getElementById('chest-row');
+  row.innerHTML = '';
+  const todayD = chestDayForToday();
+  const claimed = state.chestClaimedYMD === ymd();
+  for (let i = 1; i <= 7; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'chest-cell';
+    if (i === todayD) cell.classList.add('today');
+    if (i < todayD || (i === todayD && claimed)) cell.classList.add('claimed');
+    cell.innerHTML = `<div class="em">${i === 7 ? '🏆' : '🎁'}</div><div class="gems">${CHEST_REWARDS[i-1]} 💎</div>`;
+    row.appendChild(cell);
+  }
+  const btn = document.getElementById('chest-claim');
+  btn.disabled = claimed;
+  btn.textContent = claimed ? t('chest_claimed') + ' — ' + t('come_back') : t('claim_today');
+}
+document.getElementById('chest-claim').onclick = () => {
+  if (state.chestClaimedYMD === ymd()) return;
+  const d = chestDayForToday();
+  const baseReward = CHEST_REWARDS[d - 1];
+  const mult = rewardMultiplier();
+  const reward = baseReward * mult;
+  state.gems = (state.gems || 0) + reward;
+  state.chestDay = d;
+  state.chestClaimedYMD = ymd();
+  save(); hudUpdate(); renderChest();
+  toast('+' + reward + ' 💎' + multiplierLabel(mult));
+  playClaimSound();
+  tgHaptic('success');
+};
+
+const MISSIONS = [
+  { id: 'play_3',   icon: '🎮', tKey: 'mission_play_3',   subKey: 'mission_play_3_sub',   reward: 30,  type: 'daily', auto: true,
+    progress: () => state.gamesPlayedToday >= 3 },
+  { id: 'merge_t6_done', icon: '🪆', tKey: 'mission_merge_t6', subKey: 'mission_merge_t6_sub', reward: 60, type: 'daily', auto: true,
+    progress: () => (state.bestTierEver || 0) >= 5 },
+  { id: 'share',    icon: '📤', tKey: 'mission_share',    subKey: 'mission_share_sub',    reward: 80,  type: 'one_time', mode: 'go_check', action: 'share' },
+  { id: 'follow',   icon: '✈️', tKey: 'mission_follow',   subKey: 'mission_follow_sub',   reward: 100, type: 'one_time', mode: 'go_check', action: 'follow', url: 'https://t.me/matryoshkagame' },
+  { id: 'streak_7', icon: '🔥', tKey: 'mission_streak',   subKey: 'mission_streak_sub',   reward: 200, type: 'one_time', auto: true,
+    progress: () => (state.streak || 0) >= 7 },
+];
+
+function missionClaimed(m) {
+  const rec = state.missions[m.id];
+  if (!rec) return false;
+  if (m.type === 'daily') return rec.claimedYMD === ymd();
+  return !!rec.claimed;
+}
+function markMissionProgress(id, _val) {
+  // Auto missions are evaluated lazily via .progress() — this hook just
+  // triggers a re-render if the Earn tab happens to be open.
+  if (state.activeTab === 'earn') renderMissions();
+}
+function renderMissions() {
+  const list = document.getElementById('mission-list');
+  list.innerHTML = '';
+  for (const m of MISSIONS) {
+    const row = document.createElement('div');
+    row.className = 'mission-row';
+    const claimed = missionClaimed(m);
+    const rec = state.missions[m.id] || {};
+    const goneOut = !!rec.goneOut;
+    let cta = '';
+    let cls = '';
+    if (claimed) { cta = t('done'); cls = 'done'; }
+    else if (m.auto) {
+      if (m.progress && m.progress()) { cta = t('claim'); cls = 'claim'; }
+      else { cta = t('not_yet'); cls = 'done'; }
+    }
+    else if (m.mode === 'go_check') {
+      if (!goneOut) cta = t('go');
+      else cta = t('claim'); cls = 'claim';
+    }
+    row.innerHTML = `
+      <div class="mission-icon">${m.icon}</div>
+      <div class="mission-body">
+        <div class="mission-title">${t(m.tKey)}</div>
+        <div class="mission-sub">${t(m.subKey)}</div>
+      </div>
+      <button class="mission-cta ${cls}">${cta}</button>
+    `;
+    const btn = row.querySelector('.mission-cta');
+    btn.onclick = () => {
+      if (claimed) return;
+      if (m.auto) {
+        if (m.progress && m.progress()) doClaimMission(m);
+      } else if (m.mode === 'go_check') {
+        if (!goneOut) {
+          state.missions[m.id] = Object.assign({}, rec, { goneOut: true });
+          save();
+          if (m.action === 'share') shareScore();
+          else if (m.action === 'follow' && m.url) {
+            if (tg && tg.openLink) tg.openLink(m.url); else window.open(m.url, '_blank');
+          }
+          renderMissions();
+        } else {
+          doClaimMission(m);
+        }
+      }
+    };
+    list.appendChild(row);
+  }
+}
+function doClaimMission(m) {
+  state.missions[m.id] = Object.assign({}, state.missions[m.id] || {}, {
+    claimed: true, claimedYMD: ymd(),
+  });
+  const mult = rewardMultiplier();
+  const reward = m.reward * mult;
+  state.gems = (state.gems || 0) + reward;
+  save(); hudUpdate(); renderMissions();
+  toast('+' + reward + ' 💎' + multiplierLabel(mult));
+  playClaimSound();
+  tgHaptic('success');
+}
+
+/* =========================================================
+   [JS-14b] Achievements
+   ========================================================= */
+const ACHIEVEMENTS = [
+  { id: 'first_merge', icon: '✨', t: 'First Merge',         sub: 'Make your first merge',         reward: 10,  check: () => (state.totalMergesEver || 0) >= 1 },
+  { id: 'reach_t4',    icon: '🪆', t: 'Reach the Girl',      sub: 'Tier 4 doll',                   reward: 30,  check: () => (state.bestTierEver || 0) >= 3 },
+  { id: 'reach_t6',    icon: '🪆', t: 'Reach the Mother',    sub: 'Tier 6 doll',                   reward: 60,  check: () => (state.bestTierEver || 0) >= 5 },
+  { id: 'reach_t8',    icon: '🪆', t: 'Reach the Merchant',  sub: 'Tier 8 doll',                   reward: 100, check: () => (state.bestTierEver || 0) >= 7 },
+  { id: 'reach_t10',   icon: '🪆', t: 'Reach the Princess',  sub: 'Tier 10 doll',                  reward: 200, check: () => (state.bestTierEver || 0) >= 9 },
+  { id: 'reach_t11',   icon: '👑', t: 'Reach the Tsarina',   sub: 'Make a Tier 11 — the legend',   reward: 500, check: () => (state.bestTierEver || 0) >= 10 },
+  { id: 'games_10',    icon: '🎮', t: '10 Games',            sub: 'Play 10 games total',           reward: 30,  check: () => (state.totalGamesEver || 0) >= 10 },
+  { id: 'games_50',    icon: '🎮', t: '50 Games',            sub: 'Play 50 games total',           reward: 100, check: () => (state.totalGamesEver || 0) >= 50 },
+  { id: 'merges_100',  icon: '🔀', t: '100 Total Merges',    sub: 'Across all your runs',          reward: 60,  check: () => (state.totalMergesEver || 0) >= 100 },
+  { id: 'streak_30',   icon: '🔥', t: '30-Day Streak',       sub: 'Play 30 days in a row',         reward: 500, check: () => (state.streak || 0) >= 30 },
+  { id: 'combo_5',     icon: '⚡', t: '5× Combo!',           sub: 'Chain 5 merges in a row',       reward: 100, check: () => (state.bestComboEver || 0) >= 5 },
+  { id: 'combo_10',    icon: '⚡', t: '10× Combo!',          sub: 'Chain 10 merges in a row',      reward: 250, check: () => (state.bestComboEver || 0) >= 10 },
+  { id: 'daily_first', icon: '🌅', t: 'First Daily',         sub: 'Play one Daily Challenge',      reward: 50,  check: () => !!state.lastDailyYMD },
+  { id: 'collector_3', icon: '🎨', t: 'Skin Collector',      sub: 'Own 3 skins',                   reward: 150, check: () => (state.skins || []).length >= 3 },
+  { id: 'collector_5', icon: '🎨', t: 'Master Collector',    sub: 'Own all 5 skins',               reward: 400, check: () => (state.skins || []).length >= 5 },
+];
+
+function checkAchievements() {
+  for (const a of ACHIEVEMENTS) {
+    if (state.achievements[a.id]) continue;
+    if (a.check && a.check()) {
+      state.achievements[a.id] = { unlockedYMD: ymd() };
+      // Pop a small celebration after the game-over modal lands
+      setTimeout(() => toast('🏅 ' + a.t + ' · +' + a.reward + ' 💎'), 800);
+    }
+  }
+}
+
+// Called from inline events (combos, daily plays etc.) to mark progress on
+// achievements whose `check` reads from non-saved state and can't be
+// inferred from save data alone. We stash the milestone in a side map.
+const achievementSideFlags = { combo_5: false, combo_10: false, tsarina_pair: false };
+function markAchievementProgress(id) {
+  if (achievementSideFlags[id] !== undefined) achievementSideFlags[id] = true;
+  // Immediately resolve — checkAchievements() runs through and unlocks any
+  // ready achievement that depends on this flag.
+  checkAchievements();
+}
+
+function renderAchievements() {
+  const list = document.getElementById('achievement-list');
+  if (!list) return;
+  list.innerHTML = '';
+  let unlocked = 0;
+  for (const a of ACHIEVEMENTS) {
+    const rec = state.achievements[a.id];
+    const isUnlocked = !!rec;
+    const isClaimed = isUnlocked && rec.claimed;
+    if (isUnlocked) unlocked++;
+    const row = document.createElement('div');
+    row.className = 'ach-row' + (isUnlocked ? ' unlocked' : ' locked');
+    const cta = isClaimed ? `<button class="ach-cta done">${t('done')}</button>`
+              : isUnlocked ? `<button class="ach-cta claim" data-claim="${a.id}">${t('claim')} +${a.reward} 💎</button>`
+              : `<button class="ach-cta done">🔒</button>`;
+    row.innerHTML = `
+      <div class="ach-icon">${a.icon}</div>
+      <div class="ach-body">
+        <div class="ach-title">${a.t}</div>
+        <div class="ach-sub">${a.sub}</div>
+      </div>
+      ${cta}
+    `;
+    list.appendChild(row);
+  }
+  const p = document.getElementById('ach-progress');
+  if (p) p.textContent = unlocked + ' / ' + ACHIEVEMENTS.length;
+  list.querySelectorAll('[data-claim]').forEach(b => {
+    b.onclick = () => claimAchievement(b.getAttribute('data-claim'));
+  });
+}
+
+function claimAchievement(id) {
+  const a = ACHIEVEMENTS.find(x => x.id === id);
+  if (!a) return;
+  const rec = state.achievements[id];
+  if (!rec || rec.claimed) return;
+  const mult = rewardMultiplier();
+  const grant = a.reward * mult;
+  state.gems = (state.gems || 0) + grant;
+  state.achievements[id] = Object.assign({}, rec, { claimed: true, claimedYMD: ymd() });
+  save(); hudUpdate(); renderAchievements();
+  toast('+' + grant + ' 💎' + multiplierLabel(mult));
+  playClaimSound();
+  tgHaptic('success');
+}
+
+/* =========================================================
+   [JS-14c] Battle Pass + Power Hour + Reward multiplier
+   ========================================================= */
+function battlePassActive() {
+  return (state.battlePassUntil || 0) > Date.now();
+}
+function renderBattlePassBanner() {
+  const sec = document.getElementById('bp-section');
+  if (!sec) return;
+  if (!battlePassActive()) { sec.style.display = 'none'; return; }
+  sec.style.display = '';
+  const days = Math.max(0, Math.ceil(((state.battlePassUntil || 0) - Date.now()) / 86400000));
+  const sub = document.getElementById('bp-sub');
+  if (sub) sub.textContent = '2× rewards · ' + days + ' day' + (days === 1 ? '' : 's') + ' left';
+}
+
+// Power Hour — server-driven. Polled every 60s. When active, all reward
+// claims (chest, missions, achievements, milestones) multiply by 2 — same
+// effect as battle pass, but layered (so battle pass + power hour = 4×).
+let powerHourState = { active: false, starts_at: 0, ends_at: 0, multiplier: 1 };
+async function fetchPowerHour() {
+  try {
+    const r = await fetch('/api/power-hour');
+    const d = await r.json();
+    powerHourState = d;
+    renderPowerHourBanner();
+  } catch (e) {}
+}
+function renderPowerHourBanner() {
+  const b = document.getElementById('ph-banner');
+  if (!b) return;
+  if (powerHourState.active) {
+    const minsLeft = Math.max(0, Math.ceil((powerHourState.ends_at - Date.now()) / 60000));
+    document.getElementById('ph-text').textContent = 'POWER HOUR · 2× · ' + minsLeft + 'm';
+    b.classList.add('show');
+  } else {
+    b.classList.remove('show');
+  }
+}
+function rewardMultiplier() {
+  let m = 1;
+  if (battlePassActive()) m *= 2;
+  if (powerHourState.active) m *= 2;
+  return m;
+}
+function multiplierLabel(m) {
+  if (m <= 1) return '';
+  if (m === 2) return ' (2×)';
+  if (m === 4) return ' (4× MAX!)';
+  return ' (' + m + '×)';
+}
+
+/* =========================================================
+   [JS-14e] Streak milestones
+   ========================================================= */
+const STREAK_MILESTONES = [
+  { days: 3,   reward: 30 },
+  { days: 7,   reward: 100 },
+  { days: 14,  reward: 300 },
+  { days: 30,  reward: 750 },
+  { days: 100, reward: 2500 },
+];
+
+function renderMilestones() {
+  const row = document.getElementById('milestone-row');
+  if (!row) return;
+  row.innerHTML = '';
+  state.milestonesClaimed = state.milestonesClaimed || {};
+  for (const m of STREAK_MILESTONES) {
+    const unlocked = (state.streak || 0) >= m.days;
+    const claimed = !!state.milestonesClaimed['s' + m.days];
+    const cell = document.createElement('div');
+    cell.className = 'milestone' + (unlocked ? ' unlocked' : '') + (claimed ? ' claimed' : (unlocked ? ' claimable' : ''));
+    cell.innerHTML = `<div class="em">${m.days >= 30 ? '👑' : '🔥'}</div><div class="days">${m.days}d</div><div class="reward">${m.reward} 💎</div>`;
+    if (unlocked && !claimed) {
+      cell.onclick = () => claimMilestone(m);
+    }
+    row.appendChild(cell);
+  }
+}
+function claimMilestone(m) {
+  if (state.milestonesClaimed['s' + m.days]) return;
+  state.milestonesClaimed['s' + m.days] = ymd();
+  const mult = rewardMultiplier();
+  const reward = m.reward * mult;
+  state.gems = (state.gems || 0) + reward;
+  save(); hudUpdate(); renderMilestones();
+  toast('+' + reward + ' 💎' + multiplierLabel(mult));
+  playClaimSound();
+  tgHaptic('success');
+}
+
+/* =========================================================
+   [JS-14f] Stats panel
+   ========================================================= */
+function openStats() {
+  const body = document.getElementById('modal-body');
+  const rows = [
+    ['📊', t('stat_best'),         state.best || 0],
+    ['🌅', t('stat_best_daily'),   state.dailyBestToday || 0],
+    ['🪆', t('stat_best_tier'),    (state.bestTierEver || 0) + 1 + ' / ' + TIER_COUNT],
+    ['⚡', t('stat_best_combo'),   (state.bestComboEver || 0) + '×'],
+    ['🎮', t('stat_games'),        state.totalGamesEver || 0],
+    ['🔀', t('stat_merges'),       state.totalMergesEver || 0],
+    ['🔥', t('stat_streak'),       state.streak || 0],
+    ['💎', t('stat_gems'),         state.gems || 0],
+    ['🎨', t('stat_skins'),        (state.skins || []).length + ' / 5'],
+  ];
+  body.innerHTML = `
+    <h3>📊 ${t('stats_title')}</h3>
+    <div style="text-align:left">
+      ${rows.map(([em, lbl, val]) => `<div class="stat-row"><span class="label">${em}  ${escapeHtml(lbl)}</span><span class="value">${escapeHtml(String(val))}</span></div>`).join('')}
+    </div>
+    <div class="modal-btns" style="margin-top:14px">
+      <button class="btn ghost" id="m-stats-close">Close</button>
+    </div>
+  `;
+  document.getElementById('modal-shade').classList.add('show');
+  document.getElementById('m-stats-close').onclick = hideModal;
+}
+
+/* =========================================================
+   [JS-14d] Tournament
+   ========================================================= */
+function fmtCountdown(msLeft) {
+  if (msLeft <= 0) return 'ended';
+  const d = Math.floor(msLeft / 86400000);
+  const h = Math.floor((msLeft % 86400000) / 3600000);
+  const m = Math.floor((msLeft % 3600000) / 60000);
+  if (d > 0) return d + 'd ' + h + 'h';
+  if (h > 0) return h + 'h ' + m + 'm';
+  return m + 'm';
+}
+async function fetchTournament() {
+  try {
+    const r = await fetch('/api/tournament/current');
+    const d = await r.json();
+    if (!d || d.tournament === null) return;
+    renderTournament(d);
+    state.lastSeenTournamentId = d.id || '';
+    save();
+  } catch (e) {}
+}
+function renderTournament(t) {
+  const myUid = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.id) || 0;
+  const countdown = document.getElementById('t-countdown');
+  if (countdown) countdown.textContent = '· ' + fmtCountdown((t.ends_at || 0) - Date.now());
+  // Prizes chips
+  const prizes = document.getElementById('t-prizes');
+  const myRank = (t.top || []).findIndex(e => e.uid === myUid) + 1;
+  if (prizes) {
+    prizes.innerHTML = '';
+    (t.prizes || []).forEach((amt, i) => {
+      const chip = document.createElement('span');
+      chip.className = 't-prize-chip' + (myRank === i + 1 ? ' me' : '');
+      chip.innerHTML = '<span class="rk">#' + (i + 1) + '</span> ' + amt + ' 💎';
+      prizes.appendChild(chip);
+    });
+  }
+  // Top entries
+  const list = document.getElementById('t-list');
+  if (list) {
+    list.innerHTML = '';
+    const top = (t.top || []).slice(0, 25);
+    if (top.length === 0) { list.innerHTML = '<div class="lb-row">No entries yet</div>'; return; }
+    top.forEach((e, i) => {
+      const row = document.createElement('div');
+      row.className = 'lb-row' + (e.uid === myUid ? ' me' : '');
+      const rankCls = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
+      row.innerHTML = `
+        <div class="lb-rank ${rankCls}">${i + 1}</div>
+        <div class="lb-name">${escapeHtml(e.name || 'Player')}</div>
+        <div class="lb-score">${e.score}</div>
+      `;
+      list.appendChild(row);
+    });
+  }
+}
+
+/* =========================================================
+   [JS-15] Leaderboard
+   ========================================================= */
+let currentLbMode = 'regular';
+async function fetchLeaderboard(mode) {
+  currentLbMode = mode;
+  document.querySelectorAll('.lb-tab-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-lb') === mode));
+  try {
+    const r = await fetch('/api/leaderboard?mode=' + mode);
+    const d = await r.json();
+    renderLb(d.top || []);
+  } catch (e) {
+    document.getElementById('lb-list').innerHTML = '<div class="lb-row">—</div>';
+  }
+}
+function renderLb(entries) {
+  const list = document.getElementById('lb-list');
+  list.innerHTML = '';
+  const myUid = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.id) || 0;
+  if (entries.length === 0) {
+    list.innerHTML = '<div class="lb-row">No scores yet</div>';
+    return;
+  }
+  for (let i = 0; i < entries.length && i < 50; i++) {
+    const e = entries[i];
+    const row = document.createElement('div');
+    row.className = 'lb-row' + (e.uid === myUid ? ' me' : '');
+    const rankCls = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
+    row.innerHTML = `
+      <div class="lb-rank ${rankCls}">${i + 1}</div>
+      <div class="lb-name">${escapeHtml(e.name || 'Player')}</div>
+      <div class="lb-score">${e.score}</div>
+    `;
+    list.appendChild(row);
+  }
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+}
+document.querySelectorAll('.lb-tab-btn').forEach(b => {
+  b.onclick = () => fetchLeaderboard(b.getAttribute('data-lb'));
+});
+
+async function submitScore(s) {
+  const initData = getInitData();
+  if (!initData) return;
+  try {
+    const body = { initData, score: s, mode: state.mode === 'daily' ? 'daily' : 'regular' };
+    if (state.mode === 'daily') body.ymd = dailyYMD;
+    const r = await fetch('/api/score/submit', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const d = await r.json();
+    if (d && d.tournament_rank && d.tournament_rank <= 10) {
+      setTimeout(() => toast('🏆 Tournament rank: #' + d.tournament_rank), 600);
+    }
+  } catch (e) {}
+}
+
+/* =========================================================
+   [JS-16] Streak + share + settings + modal helpers
+   ========================================================= */
+function bumpStreakIfNeeded() {
+  const today = ymd();
+  if (state.lastPlayedYMD === today) return;
+  if (state.lastPlayedYMD === ymdYesterday()) {
+    state.streak = (state.streak || 0) + 1;
+  } else if (state.shieldDays > 0 && state.lastPlayedYMD && state.lastPlayedYMD !== '') {
+    state.shieldDays--;
+    state.streak = (state.streak || 0) + 1;
+  } else {
+    state.streak = 1;
+  }
+  state.lastPlayedYMD = today;
+  hudUpdate();
+}
+
+// Generate a polished 800x800 share-card PNG, upload to /api/share/upload,
+// and open the Telegram share dialog with the returned URL. Falls back to a
+// text-only share if upload fails (no initData, no server, etc.).
+async function generateShareCard(finalScore, bestTier) {
+  const c = document.createElement('canvas');
+  c.width = 800; c.height = 800;
+  const cc = c.getContext('2d');
+  // Background
+  const g = cc.createLinearGradient(0, 0, 0, 800);
+  g.addColorStop(0, '#c9162d'); g.addColorStop(1, '#6f0f1f');
+  cc.fillStyle = g; cc.fillRect(0, 0, 800, 800);
+  // Frame
+  cc.strokeStyle = 'rgba(255,213,122,0.8)'; cc.lineWidth = 4;
+  cc.strokeRect(24, 24, 752, 752);
+  // Title
+  cc.fillStyle = '#fff'; cc.textAlign = 'center';
+  cc.font = 'bold 56px -apple-system, system-ui, sans-serif';
+  cc.fillText('🪆 MATRYOSHKA', 400, 110);
+  cc.font = 'bold 26px -apple-system, system-ui, sans-serif';
+  cc.fillStyle = '#ffe6c2';
+  cc.fillText(state.mode === 'daily' ? '🌅 Daily Challenge' : 'Drop & Merge', 400, 150);
+  // Centerpiece doll
+  const doll = Math.min(10, Math.max(0, bestTier || 0));
+  drawMatryoshka(cc, 400, 410, 150, doll, 0, 1);
+  // Score
+  cc.fillStyle = '#fff';
+  cc.font = 'bold 40px -apple-system, system-ui, sans-serif';
+  cc.fillText('SCORE', 400, 620);
+  cc.font = 'bold 110px -apple-system, system-ui, sans-serif';
+  cc.fillStyle = '#fdc500';
+  cc.fillText(String(finalScore), 400, 720);
+  // Footer
+  cc.font = 'bold 22px -apple-system, system-ui, sans-serif';
+  cc.fillStyle = 'rgba(255,255,255,0.75)';
+  cc.fillText('Can you beat me?', 400, 762);
+  return c.toDataURL('image/png');
+}
+
+async function shareScore() {
+  const finalScore = score || state.best || 0;
+  const text = t('share_text').replace('{score}', finalScore);
+  let shareUrl = window.location.href;
+  // Try to upload a share-card PNG. If it succeeds, share that URL —
+  // Telegram's link preview fetches the image automatically.
+  const initData = getInitData();
+  if (initData) {
+    try {
+      const dataUrl = await generateShareCard(finalScore, state.bestTierEver || 0);
+      const r = await fetch('/api/share/upload', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData, dataUrl }),
+      });
+      const d = await r.json();
+      if (d && d.url) shareUrl = d.url;
+    } catch (e) {}
+  }
+  const tgShare = 'https://t.me/share/url?url=' + encodeURIComponent(shareUrl) + '&text=' + encodeURIComponent(text);
+  if (tg && tg.openTelegramLink) tg.openTelegramLink(tgShare);
+  else window.open(tgShare, '_blank');
+}
+
+const ALL_SKINS = [
+  { id: 'classic',   name: 'Classic',   icon: '🪆' },
+  { id: 'khokhloma', name: 'Khokhloma', icon: '🎨' },
+  { id: 'gzhel',     name: 'Gzhel',     icon: '🟦' },
+  { id: 'neon',      name: 'Neon',      icon: '⚡' },
+  { id: 'wood',      name: 'Wood',      icon: '🪵' },
+];
+function renderSkinPicker(container) {
+  container.innerHTML = '';
+  for (const s of ALL_SKINS) {
+    const owned = (state.skins || ['classic']).includes(s.id);
+    const tile = document.createElement('div');
+    tile.className = 'skin-tile' +
+      (state.activeSkin === s.id ? ' active' : '') +
+      (!owned ? ' locked' : '');
+    tile.innerHTML = `<div class="em">${s.icon}</div><div>${s.name}</div>` + (!owned ? '<div style="font-size:9px">🔒 Shop</div>' : '');
+    tile.onclick = () => {
+      if (!owned) { switchTab('shop'); hideModal(); return; }
+      state.activeSkin = s.id;
+      save();
+      renderSkinPicker(container);
+      buildTierDots();
+    };
+    container.appendChild(tile);
+  }
+}
+
+document.getElementById('btn-settings').onclick = () => {
+  const body = document.getElementById('modal-body');
+  body.innerHTML = `
+    <h3>${t('settings')}</h3>
+    <div style="font-size:12px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:1px;margin-top:4px">${t('skin')}</div>
+    <div class="skin-picker" id="skin-picker"></div>
+    <div class="modal-btns">
+      <button class="btn" id="m-sound">${state.settings.sound ? t('sound_on') : t('sound_off')}</button>
+      <button class="btn" id="m-haptics">${state.settings.haptics ? t('haptics_on') : t('haptics_off')}</button>
+      <button class="btn ghost" id="m-stats">📊 ${t('stats_title')}</button>
+      <button class="btn ghost" id="m-howto">🎓 ${t('how_to_play')}</button>
+      <button class="btn ghost" id="m-newgame2">🔄 ${t('new_game')}</button>
+      <button class="btn ghost" id="m-close">Close</button>
+    </div>
+  `;
+  document.getElementById('modal-shade').classList.add('show');
+  renderSkinPicker(document.getElementById('skin-picker'));
+  document.getElementById('m-sound').onclick = () => { state.settings.sound = !state.settings.sound; save(); document.getElementById('btn-settings').click(); hideModal(); };
+  document.getElementById('m-haptics').onclick = () => { state.settings.haptics = !state.settings.haptics; save(); document.getElementById('btn-settings').click(); hideModal(); };
+  document.getElementById('m-stats').onclick = () => { hideModal(); openStats(); };
+  document.getElementById('m-howto').onclick = () => { hideModal(); openFtue(); };
+  document.getElementById('m-newgame2').onclick = () => { hideModal(); newGame(); };
+  document.getElementById('m-close').onclick = hideModal;
+};
+
+function hideModal() {
+  document.getElementById('modal-shade').classList.remove('show');
+}
+document.getElementById('modal-shade').addEventListener('click', (e) => {
+  if (e.target.id === 'modal-shade') hideModal();
+});
+
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+/* =========================================================
+   [JS-17] Layout sizing (canvas fits the viewport)
+   ========================================================= */
+function fitCanvas() {
+  const wrap = document.getElementById('canvas-wrap');
+  const rect = wrap.getBoundingClientRect();
+  const dpr = Math.min(2.5, window.devicePixelRatio || 1);
+  const targetW = Math.min(rect.width, 420);
+  const targetH = Math.min(rect.height, 640);
+  // Aspect ratio 360:540 (2:3). Fit width first, scale up if it leaves room.
+  let cssW = targetW;
+  let cssH = (cssW * 540) / 360;
+  if (cssH > targetH) { cssH = targetH; cssW = (cssH * 360) / 540; }
+  canvas.style.width = cssW + 'px';
+  canvas.style.height = cssH + 'px';
+  canvas.width = 360;
+  canvas.height = 540;
+  // Position next-pill at top-right of jar
+  const nextPill = document.getElementById('next-pill');
+  const dock = document.getElementById('tiers-dock');
+  const mascot = document.getElementById('mascot-wrap');
+  const canvasRect = canvas.getBoundingClientRect();
+  nextPill.style.top = (canvasRect.top - rect.top + 6) + 'px';
+  nextPill.style.right = (rect.right - canvasRect.right + 6) + 'px';
+  dock.style.bottom = (rect.bottom - canvasRect.bottom + 8) + 'px';
+  dock.style.left = '50%';
+  dock.style.transform = 'translateX(-50%)';
+  // Mascot: bottom-left, hugging the jar
+  if (mascot) {
+    mascot.style.left = (canvasRect.left - rect.left - 6) + 'px';
+    mascot.style.bottom = (rect.bottom - canvasRect.bottom + 0) + 'px';
+    // Bubble: anchor above mascot
+    mascotBubble.style.left = '46px';
+    mascotBubble.style.bottom = '78px';
+  }
+}
+window.addEventListener('resize', () => { fitCanvas(); applySafeArea(); });
+
+/* =========================================================
+   [JS-18] Daily roll-over for counters
+   ========================================================= */
+function rolloverDailyIfNeeded() {
+  const today = ymd();
+  if (state.gamesPlayedYMD !== today) {
+    state.gamesPlayedToday = 0;
+    state.gamesPlayedYMD = today;
+  }
+}
+
+/* =========================================================
+   [JS-19] FTUE — first-time tutorial with animated demos
+   ========================================================= */
+// Each step has an i18n key for title + body and a `draw(ctx, t)` function
+// where `t` is milliseconds since the step opened. The demo canvas is
+// 304×200; all draws use those coords.
+const FTUE_DEMO_W = 304, FTUE_DEMO_H = 200;
+const FTUE_STEPS = [
+  { key: 'welcome', draw: drawFtuePyramid },
+  { key: 'drop',    draw: drawFtueDragDrop },
+  { key: 'merge',   draw: drawFtueMerge },
+  { key: 'line',    draw: drawFtueDeathLine },
+  { key: 'goal',    draw: drawFtueGoal },
+];
+
+let ftueIdx = 0;
+let ftueStepStartMs = 0;
+let ftueRafId = 0;
+
+function drawMiniJar(c, x, y, w, h) {
+  // Wood-grain backplate
+  c.fillStyle = '#fff8e2';
+  roundRect(c, x, y, w, h, 12); c.fill();
+  c.strokeStyle = '#b88317'; c.lineWidth = 2;
+  roundRect(c, x, y, w, h, 12); c.stroke();
+}
+
+function drawFtuePyramid(c, _t) {
+  c.clearRect(0, 0, FTUE_DEMO_W, FTUE_DEMO_H);
+  // Show all 11 tiers in a row scaled to fit the demo width.
+  const sizes = [4, 5, 6, 7, 8, 9, 11, 13, 15, 18, 22];
+  const totalW = sizes.reduce((s, r) => s + 2 * r + 3, -3);
+  let x = (FTUE_DEMO_W - totalW) / 2;
+  for (let i = 0; i < sizes.length; i++) {
+    const r = sizes[i];
+    drawMatryoshka(c, x + r, FTUE_DEMO_H - 60 - r, r, i, 0, 1);
+    x += 2 * r + 3;
+  }
+  // Caption beneath
+  c.fillStyle = '#a51d30';
+  c.font = 'bold 12px -apple-system, system-ui, sans-serif';
+  c.textAlign = 'center';
+  c.fillText(t('ftue_pyramid_cap'), FTUE_DEMO_W / 2, FTUE_DEMO_H - 14);
+}
+
+function drawFtueDragDrop(c, ms) {
+  c.clearRect(0, 0, FTUE_DEMO_W, FTUE_DEMO_H);
+  const jX = 52, jY = 36, jW = 200, jH = 150;
+  drawMiniJar(c, jX, jY, jW, jH);
+  // Cycle: 0-1200 drag, 1200-1900 drop, 1900-2400 settle, repeat
+  const CYCLE = 2400;
+  const phase = ms % CYCLE;
+  const r = TIER_RADII[1] * 0.7;     // T2-ish, scaled down
+  let x, y;
+  const jBot = jY + jH - 6;
+  const startX = jX + 28, endX = jX + jW - 28;
+  if (phase < 1200) {
+    const p = phase / 1200;
+    // Ease in-out left → right
+    const eased = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+    x = startX + (endX - startX) * eased;
+    y = jY - 8;
+    drawMatryoshka(c, x, y, r, 1, 0, 1);
+    // Finger hint just below carrier
+    c.font = '22px sans-serif'; c.textAlign = 'center';
+    c.fillText('👆', x, y + r + 18);
+    // Trailing arrow
+    c.strokeStyle = 'rgba(165,29,48,0.55)'; c.lineWidth = 2; c.setLineDash([4, 3]);
+    c.beginPath(); c.moveTo(startX, y + r + 28); c.lineTo(endX, y + r + 28); c.stroke();
+    c.setLineDash([]);
+    // Tip arrow head
+    c.beginPath();
+    c.moveTo(endX, y + r + 28); c.lineTo(endX - 6, y + r + 24); c.lineTo(endX - 6, y + r + 32); c.closePath();
+    c.fillStyle = 'rgba(165,29,48,0.7)'; c.fill();
+  } else if (phase < 1900) {
+    const p = (phase - 1200) / 700;
+    x = endX;
+    y = (jY - 8) + ((jBot - r) - (jY - 8)) * (p * p);
+    drawMatryoshka(c, x, y, r, 1, 0, 1);
+  } else {
+    x = endX; y = jBot - r;
+    drawMatryoshka(c, x, y, r, 1, 0, 1);
+    // Tap-to-drop hint at original position
+    if (phase < 2200) {
+      c.fillStyle = 'rgba(165,29,48,0.8)';
+      c.font = 'bold 13px sans-serif'; c.textAlign = 'center';
+      c.fillText(t('ftue_drop_tap'), FTUE_DEMO_W / 2, jBot + 12);
+    }
+  }
+}
+
+function drawFtueMerge(c, ms) {
+  c.clearRect(0, 0, FTUE_DEMO_W, FTUE_DEMO_H);
+  const jX = 52, jY = 36, jW = 200, jH = 150;
+  drawMiniJar(c, jX, jY, jW, jH);
+  const jBot = jY + jH - 6;
+  const CYCLE = 3600;
+  const phase = ms % CYCLE;
+  const r1 = TIER_RADII[0] * 1.4;    // larger for visibility
+  const r2 = TIER_RADII[1] * 1.2;
+  // 0-900: two T1 dolls falling
+  // 900-1400: they sit at floor near center
+  // 1400-1700: flash + merge transition
+  // 1700-3200: a T2 doll at center with +3 popup floating
+  // 3200-3600: pause
+  const leftX = jX + 70, rightX = jX + jW - 70, midX = jX + jW / 2;
+  if (phase < 900) {
+    const p = phase / 900;
+    const yTop = jY - 8;
+    const y = yTop + ((jBot - r1) - yTop) * (p * p);
+    drawMatryoshka(c, leftX, y, r1, 0, 0, 1);
+    drawMatryoshka(c, rightX, y, r1, 0, 0, 1);
+  } else if (phase < 1400) {
+    drawMatryoshka(c, leftX, jBot - r1, r1, 0, 0, 1);
+    drawMatryoshka(c, rightX, jBot - r1, r1, 0, 0, 1);
+    // converge hint
+    c.strokeStyle = '#a51d30'; c.lineWidth = 2;
+    c.beginPath();
+    c.moveTo(leftX + r1 + 4, jBot - r1);
+    c.lineTo(rightX - r1 - 4, jBot - r1);
+    c.stroke();
+  } else if (phase < 1700) {
+    const p = (phase - 1400) / 300;
+    // flash
+    c.fillStyle = 'rgba(255,200,80,' + (0.6 - p * 0.4) + ')';
+    c.beginPath(); c.arc(midX, jBot - r2 - 4, r2 + 14, 0, Math.PI * 2); c.fill();
+    const scale = 0.4 + p * 0.7;
+    drawMatryoshka(c, midX, jBot - r2, r2, 1, 0, Math.min(1, scale));
+  } else {
+    const p = (phase - 1700) / 1500;
+    drawMatryoshka(c, midX, jBot - r2, r2, 1, 0, 1);
+    if (p < 0.7) {
+      const yoff = p * 32;
+      c.font = 'bold 18px -apple-system, system-ui, sans-serif';
+      c.textAlign = 'center';
+      c.globalAlpha = Math.max(0, 1 - p / 0.7);
+      c.strokeStyle = '#fff'; c.lineWidth = 3;
+      c.strokeText('+3', midX + 38, jBot - r2 * 2 - yoff);
+      c.fillStyle = '#a51d30';
+      c.fillText('+3', midX + 38, jBot - r2 * 2 - yoff);
+      c.globalAlpha = 1;
+    }
+  }
+}
+
+function drawFtueDeathLine(c, ms) {
+  c.clearRect(0, 0, FTUE_DEMO_W, FTUE_DEMO_H);
+  const jX = 52, jY = 36, jW = 200, jH = 150;
+  drawMiniJar(c, jX, jY, jW, jH);
+  const lineY = jY + 22;
+  // Pulsing dashed death line
+  const pulse = 0.55 + 0.35 * Math.sin(ms / 220);
+  c.save();
+  c.strokeStyle = 'rgba(255,84,112,' + pulse + ')';
+  c.lineWidth = 2;
+  c.setLineDash([6, 4]);
+  c.beginPath();
+  c.moveTo(jX + 8, lineY); c.lineTo(jX + jW - 8, lineY);
+  c.stroke();
+  c.restore();
+  // Caption above line
+  c.fillStyle = '#d93f5d';
+  c.font = 'bold 10px sans-serif'; c.textAlign = 'right';
+  c.fillText('⚠ ' + t('ftue_line_label'), jX + jW - 10, lineY - 4);
+  // Stack of dolls — one warning doll poking above line
+  const jBot = jY + jH - 6;
+  const rs = [TIER_RADII[2] * 0.8, TIER_RADII[1] * 0.9, TIER_RADII[0] * 1.1, TIER_RADII[3] * 0.7];
+  let yy = jBot - rs[0];
+  drawMatryoshka(c, jX + 50, yy, rs[0], 2, 0, 1);
+  drawMatryoshka(c, jX + 130, jBot - rs[1], rs[1], 1, 0, 1);
+  drawMatryoshka(c, jX + 100, jBot - rs[1] * 2 - rs[2] - 2, rs[2], 0, 0, 1);
+  // The danger doll bobbing above the line
+  const bobR = TIER_RADII[3] * 0.65;
+  const bobY = lineY - bobR + Math.sin(ms / 180) * 1.5;
+  c.save();
+  const glow = 0.5 + 0.4 * Math.sin(ms / 200);
+  c.shadowColor = 'rgba(255,84,112,' + glow + ')';
+  c.shadowBlur = 14;
+  drawMatryoshka(c, jX + 75, bobY, bobR, 3, 0, 1);
+  c.restore();
+}
+
+function drawFtueGoal(c, ms) {
+  c.clearRect(0, 0, FTUE_DEMO_W, FTUE_DEMO_H);
+  // Big crowned Tsarina centerpiece with smaller tiers orbiting
+  const cx = FTUE_DEMO_W / 2, cy = FTUE_DEMO_H / 2 + 12;
+  // Sparkles
+  const N = 14;
+  for (let i = 0; i < N; i++) {
+    const a = (i / N) * Math.PI * 2 + ms / 900;
+    const rad = 60 + 14 * Math.sin(ms / 350 + i);
+    const px = cx + Math.cos(a) * rad;
+    const py = cy + Math.sin(a) * rad * 0.62;
+    const sz = 1.5 + Math.sin(ms / 260 + i) * 1;
+    c.fillStyle = i % 2 === 0 ? '#fdc500' : '#fff5d2';
+    c.beginPath(); c.arc(px, py, Math.max(0.6, sz), 0, Math.PI * 2); c.fill();
+  }
+  // The Tsarina
+  const r = 56;
+  const bob = Math.sin(ms / 300) * 3;
+  drawMatryoshka(c, cx, cy + bob, r, 10, Math.sin(ms / 600) * 0.06, 1);
+  // Caption
+  c.fillStyle = '#a51d30';
+  c.font = 'bold 12px sans-serif'; c.textAlign = 'center';
+  c.fillText(t('ftue_goal_cap'), cx, FTUE_DEMO_H - 10);
+}
+
+function ftueRenderChrome() {
+  const step = FTUE_STEPS[ftueIdx];
+  document.getElementById('ftue-title').textContent = t('ftue_' + step.key + '_title');
+  document.getElementById('ftue-body').textContent  = t('ftue_' + step.key + '_body');
+  // Dots
+  const dots = document.getElementById('ftue-dots');
+  dots.innerHTML = '';
+  for (let i = 0; i < FTUE_STEPS.length; i++) {
+    const d = document.createElement('div');
+    d.className = 'ftue-dot' + (i === ftueIdx ? ' active' : '');
+    dots.appendChild(d);
+  }
+  // Buttons
+  const back = document.getElementById('ftue-back');
+  back.style.visibility = ftueIdx === 0 ? 'hidden' : '';
+  const isLast = ftueIdx === FTUE_STEPS.length - 1;
+  document.getElementById('ftue-next-label').textContent = isLast
+    ? '🪆 ' + t('ftue_lets_play')
+    : t('ftue_next');
+}
+
+function ftueLoop() {
+  const c = document.getElementById('ftue-canvas').getContext('2d');
+  const elapsed = performance.now() - ftueStepStartMs;
+  const step = FTUE_STEPS[ftueIdx];
+  if (step && step.draw) step.draw(c, elapsed);
+  ftueRafId = requestAnimationFrame(ftueLoop);
+}
+
+function ftueGoTo(i) {
+  ftueIdx = Math.max(0, Math.min(FTUE_STEPS.length - 1, i));
+  ftueStepStartMs = performance.now();
+  ftueRenderChrome();
+  tgHaptic('select');
+}
+
+function openFtue() {
+  document.getElementById('ftue-shade').classList.add('show');
+  ftueIdx = 0;
+  ftueStepStartMs = performance.now();
+  ftueRenderChrome();
+  if (!ftueRafId) ftueLoop();
+}
+
+function closeFtue() {
+  document.getElementById('ftue-shade').classList.remove('show');
+  if (ftueRafId) { cancelAnimationFrame(ftueRafId); ftueRafId = 0; }
+  state.ftueDone = true;
+  state.welcomed = true;
+  state.firstSeenAt = state.firstSeenAt || Date.now();
+  save();
+}
+
+document.getElementById('ftue-skip').onclick = closeFtue;
+document.getElementById('ftue-back').onclick = () => ftueGoTo(ftueIdx - 1);
+document.getElementById('ftue-next').onclick = () => {
+  if (ftueIdx >= FTUE_STEPS.length - 1) { closeFtue(); tgHaptic('success'); }
+  else ftueGoTo(ftueIdx + 1);
+};
+
+function openFtueIfFirst() {
+  // Migration: pre-FTUE users (welcomed before v0.2.1) already played, don't
+  // force the tutorial on them — they can replay it from Settings.
+  if (state.welcomed && state.ftueDone === undefined) {
+    state.ftueDone = true; save();
+    return;
+  }
+  if (!state.ftueDone) openFtue();
+}
+
+/* =========================================================
+   [JS-20] Boot
+   ========================================================= */
+(async function boot() {
+  load();
+  applyI18n();
+  tgReady();
+  hudUpdate();
+  buildTierDots();
+  fitCanvas();
+  rolloverDailyIfNeeded();
+  // Load the daily seed FIRST so the deterministic queue is ready if the
+  // saved mode is 'daily'. Falls back to a default seed if offline.
+  await loadDailySeed();
+  // If user is in daily mode but the date has rolled, treat their saved
+  // dailyBestToday as stale — it'll be reset on first game-over for the
+  // new day.
+  newGame();
+  // Restore last active tab AFTER newGame so the canvas is initialized.
+  if (state.activeTab && state.activeTab !== 'home') {
+    setTimeout(() => switchTab(state.activeTab), 50);
+  }
+  // Server bridge — only when running inside Telegram
+  if (getInitData()) {
+    serverHeartbeat();
+    serverStateLoad();
+    setInterval(serverHeartbeat, 60000);
+    // Drain any pending tournament prizes on boot (covers redeploy scenarios
+    // where the bot wasn't online when the player's prize was awarded).
+    try {
+      const r = await fetch('/api/poll-purchases', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData: getInitData() }),
+      });
+      const d = await r.json();
+      if (d && d.purchases) for (const p of d.purchases) applyGrant(p.grant);
+      save(); hudUpdate();
+    } catch (e) {}
+  }
+  requestAnimationFrame(gameTick);
+  // Splash auto-dismiss after the loading bar finishes (1.4s + 200ms breathing room)
+  setTimeout(() => {
+    const sp = document.getElementById('splash');
+    if (sp) {
+      sp.classList.add('hide');
+      setTimeout(() => sp.remove(), 500);
+    }
+    openFtueIfFirst();
+  }, 1500);
+  checkAchievements();
+  // Show mascot intro line briefly when game is ready
+  setTimeout(() => {
+    if (!state.ftueDone) return;   // Don't intrude on FTUE flow
+    const lines = MASCOT_LINES.intro;
+    showMascotBubble(lines[Math.floor(Math.random() * lines.length)], 2200);
+  }, 1900);
+  // Power Hour — fetch on boot + refresh every 5 min
+  fetchPowerHour();
+  setInterval(fetchPowerHour, 5 * 60 * 1000);
+})();
+
+</script>
+</body>
+</html>
