@@ -1656,24 +1656,21 @@ function applySafeArea() {
       if (sa) { top = Math.max(top, sa.top || 0); bottom = Math.max(bottom, sa.bottom || 0); }
     }
   } catch (e) {}
-  // Defensive overrides (revised v0.3.8):
+  // Defensive overrides (v0.3.6):
   //
-  // TOP — When NOT in fullscreen, Telegram's top chrome plus the device
-  // notch / status bar can be substantial:
-  //   * iOS:     chrome ~44 + notch/Dynamic Island ~44 = ~88px total
-  //   * Android: chrome ~44 + status bar ~30        = ~74px total
-  // Several Telegram clients under-report this in contentSafeAreaInset,
-  // so the topbar would tuck behind the "X Close" / Dynamic Island.
-  // Floor at 92px in expanded mode — guaranteed to clear both platforms.
-  // On older devices with smaller chrome this slightly over-pads, but
-  // that's a much smaller UX cost than hiding the gem pill.
+  // TOP — When the Mini App is NOT in fullscreen mode, Telegram's top
+  // chrome (status bar + X Close + dropdown + ⋮ overflow) takes ~60-80px,
+  // but several Telegram clients report contentSafeAreaInset.top as 0 or
+  // a much smaller value, so our topbar would tuck behind the "X Close"
+  // button. Floor at 64px in expanded mode to guarantee the gem pill
+  // clears the chrome.
   //
   // BOTTOM — Telegram occasionally over-reports the bottom inset by
-  // ~3-4× (saw 80-90px on a Samsung S22 with a 24-30px gesture pill).
-  // Cap at 36px — leaves room for the iOS home indicator (~34px) while
-  // refusing the runaway over-reports.
-  if (!isFullscreen && top < 92) top = 92;
-  if (bottom > 36) bottom = 36;
+  // ~3-4×, leaving a giant white strip under the tab bar (~80-90px on
+  // Samsung S22 where the actual gesture-pill is only 24-30px). Cap at
+  // 28px which is plenty for any modern Android / iOS device.
+  if (!isFullscreen && top < 64) top = 64;
+  if (bottom > 28) bottom = 28;
   document.documentElement.style.setProperty('--tg-safe-top', top + 'px');
   document.documentElement.style.setProperty('--tg-safe-bottom', bottom + 'px');
 }
