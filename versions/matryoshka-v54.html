@@ -668,25 +668,6 @@
   .skin-tile.locked { opacity: 0.55; }
   .skin-tile .em { font-size: 22px; }
 
-  /* Language picker tiles inside settings modal — 4 columns × 5 rows */
-  .lang-grid {
-    display: grid; grid-template-columns: repeat(4, 1fr);
-    gap: 5px; margin: 6px 0 10px;
-    max-height: 260px; overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-  .lang-tile {
-    background: var(--paper); border: 1.5px solid #ecd9a8;
-    border-radius: 8px; padding: 6px 2px;
-    font-size: 10px; font-weight: 700; color: var(--ink-soft);
-    cursor: pointer; text-align: center;
-    display: flex; flex-direction: column; align-items: center; gap: 2px;
-    line-height: 1.15;
-  }
-  .lang-tile.active { border-color: var(--gold-deep); background: #fff5d2; color: var(--ink); border-width: 2px; }
-  .lang-tile .flag { font-size: 18px; line-height: 1; }
-  .lang-tile .name { font-size: 9px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
   /* =========================================================
      [10] Modal
      ========================================================= */
@@ -1432,7 +1413,6 @@ const STRINGS = {
     settings: 'Settings', sound_on: 'Sound: ON', sound_off: 'Sound: OFF',
     haptics_on: 'Vibrate: ON', haptics_off: 'Vibrate: OFF',
     skin: 'Skin',
-    language: 'Language',
     shop_title: '⭐ Shop', shop_sub: 'Telegram Stars only. No ads, ever.',
     earn_title: '🎁 Earn', earn_sub: 'Free gems, missions, leaderboard.',
     daily_chest: 'Daily Login Chest', claim_today: 'Claim Today',
@@ -1501,7 +1481,6 @@ const STRINGS = {
     settings: 'Настройки', sound_on: 'Звук: ВКЛ', sound_off: 'Звук: ВЫКЛ',
     haptics_on: 'Вибро: ВКЛ', haptics_off: 'Вибро: ВЫКЛ',
     skin: 'Скин',
-    language: 'Язык',
     shop_title: '⭐ Магазин', shop_sub: 'Только Telegram Stars. Без рекламы.',
     earn_title: '🎁 Бонусы', earn_sub: 'Бесплатные гемы, миссии, рейтинг.',
     daily_chest: 'Ежедневный сундук', claim_today: 'Забрать сегодня',
@@ -4666,68 +4645,6 @@ const ALL_SKINS = [
   { id: 'neon',      name: 'Neon',      icon: '⚡' },
   { id: 'wood',      name: 'Wood',      icon: '🪵' },
 ];
-
-// Language options — flag emoji + native-language name. Order roughly by
-// expected player share so the most-likely choices are at the top of the
-// grid. EN + RU first because they have full string coverage; the rest
-// have ~25 keys plus EN fallback.
-const LANG_OPTIONS = [
-  { code: 'en', flag: '🇬🇧', name: 'English'    },
-  { code: 'ru', flag: '🇷🇺', name: 'Русский'    },
-  { code: 'uk', flag: '🇺🇦', name: 'Українська' },
-  { code: 'es', flag: '🇪🇸', name: 'Español'    },
-  { code: 'pt', flag: '🇵🇹', name: 'Português'  },
-  { code: 'fr', flag: '🇫🇷', name: 'Français'   },
-  { code: 'de', flag: '🇩🇪', name: 'Deutsch'    },
-  { code: 'it', flag: '🇮🇹', name: 'Italiano'   },
-  { code: 'nl', flag: '🇳🇱', name: 'Nederlands' },
-  { code: 'sv', flag: '🇸🇪', name: 'Svenska'    },
-  { code: 'pl', flag: '🇵🇱', name: 'Polski'     },
-  { code: 'tr', flag: '🇹🇷', name: 'Türkçe'     },
-  { code: 'ar', flag: '🇸🇦', name: 'العربية'    },
-  { code: 'he', flag: '🇮🇱', name: 'עברית'      },
-  { code: 'hi', flag: '🇮🇳', name: 'हिन्दी'      },
-  { code: 'id', flag: '🇮🇩', name: 'Indonesia'  },
-  { code: 'vi', flag: '🇻🇳', name: 'Tiếng Việt' },
-  { code: 'zh', flag: '🇨🇳', name: '中文'       },
-  { code: 'ko', flag: '🇰🇷', name: '한국어'     },
-  { code: 'ja', flag: '🇯🇵', name: '日本語'     },
-];
-
-function renderLangPicker(container) {
-  container.innerHTML = '';
-  for (const L of LANG_OPTIONS) {
-    const tile = document.createElement('div');
-    tile.className = 'lang-tile' + (state.settings.lang === L.code ? ' active' : '');
-    tile.innerHTML = `<div class="flag">${L.flag}</div><div class="name">${L.name}</div>`;
-    tile.onclick = () => {
-      const prev = state.settings.lang;
-      if (prev === L.code) return;
-      state.settings.lang = L.code;
-      save();
-      applyI18n();             // updates every [data-i18n] text
-      renderLangPicker(container);
-      // Re-render whatever tab is open so localized labels refresh immediately
-      if (state.activeTab === 'shop') renderShop();
-      if (state.activeTab === 'earn') {
-        renderBattlePassBanner();
-        renderSpinSection();
-        renderChest();
-        renderMilestones();
-        renderMissions();
-        renderAchievements();
-      }
-      hudUpdate();
-      if (typeof MX !== 'undefined' && MX.ready) {
-        MX.track('Language Changed', { from: prev, to: L.code });
-        MX.setProfile({ language: L.code });
-        MX.setSuper({ lang: L.code });
-      }
-      tgHaptic('select');
-    };
-    container.appendChild(tile);
-  }
-}
 function renderSkinPicker(container) {
   container.innerHTML = '';
   for (const s of ALL_SKINS) {
@@ -4768,8 +4685,6 @@ document.getElementById('btn-settings').onclick = () => {
   const body = document.getElementById('modal-body');
   body.innerHTML = `
     <h3>${t('settings')}</h3>
-    <div style="font-size:12px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:1px;margin-top:4px">${t('language') || 'Language'}</div>
-    <div class="lang-grid" id="lang-picker"></div>
     <div style="font-size:12px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:1px;margin-top:4px">${t('skin')}</div>
     <div class="skin-picker" id="skin-picker"></div>
     <div class="modal-btns">
@@ -4782,7 +4697,6 @@ document.getElementById('btn-settings').onclick = () => {
     </div>
   `;
   document.getElementById('modal-shade').classList.add('show');
-  renderLangPicker(document.getElementById('lang-picker'));
   renderSkinPicker(document.getElementById('skin-picker'));
   document.getElementById('m-sound').onclick = () => { state.settings.sound = !state.settings.sound; save(); document.getElementById('btn-settings').click(); hideModal(); };
   document.getElementById('m-haptics').onclick = () => { state.settings.haptics = !state.settings.haptics; save(); document.getElementById('btn-settings').click(); hideModal(); };
