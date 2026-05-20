@@ -1084,106 +1084,9 @@
 
 <script>
 /* =========================================================
-   [JS-00] Mixpanel client — direct HTTP API (no script tag).
-   Token is pulled from /api/flags at boot. Distinct ID is the
-   Telegram user ID, so the same player on phone + tablet shows
-   up as one user. Events use $insert_id for dedupe, time in
-   seconds, and standard super-properties (session_id, platform,
-   lang, version, mode). User profile is $set on first identify.
-   ========================================================= */
-'use strict';
-
-const MX_VERSION = 'v0.3.16';
-const MX = {
-  token: '',
-  distinctId: null,
-  superProps: {},
-  sessionId: '',
-  sessionStartMs: 0,
-  ready: false,
-
-  init(token, distinctId, userProfile) {
-    this.token = String(token || '');
-    if (!this.token) return;
-    this.distinctId = String(distinctId || ('anon-' + Math.floor(Math.random() * 1e10)));
-    this.sessionId = (Date.now().toString(36) + Math.random().toString(36).slice(2, 8));
-    this.sessionStartMs = Date.now();
-    this.superProps = {
-      session_id: this.sessionId,
-      app_version: MX_VERSION,
-      platform: (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.platform) || 'web',
-      tg_version: (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.version) || '',
-    };
-    this.ready = true;
-    if (userProfile) this.setProfile(userProfile);
-  },
-
-  setSuper(props) { Object.assign(this.superProps, props || {}); },
-
-  track(eventName, props) {
-    if (!this.ready) return;
-    try {
-      const data = {
-        event: eventName,
-        properties: Object.assign({}, this.superProps, props || {}, {
-          token: this.token,
-          distinct_id: this.distinctId,
-          time: Math.floor(Date.now() / 1000),
-          $insert_id: Date.now().toString(36) + Math.random().toString(36).slice(2, 10),
-        }),
-      };
-      this._send('https://api.mixpanel.com/track', data);
-    } catch (e) {}
-  },
-
-  setProfile(props) {
-    if (!this.ready) return;
-    try {
-      this._send('https://api.mixpanel.com/engage', {
-        $token: this.token,
-        $distinct_id: this.distinctId,
-        $set: props,
-      });
-    } catch (e) {}
-  },
-
-  // Increment numeric profile properties — useful for things like
-  // total games / total IAPs / total merges that we want updated
-  // server-side in Mixpanel without a full setProfile call.
-  incrementProfile(props) {
-    if (!this.ready) return;
-    try {
-      this._send('https://api.mixpanel.com/engage', {
-        $token: this.token,
-        $distinct_id: this.distinctId,
-        $add: props,
-      });
-    } catch (e) {}
-  },
-
-  _send(url, body) {
-    const payload = JSON.stringify(body);
-    // base64-encode for the data= URL param (Mixpanel's classic format)
-    let encoded;
-    try { encoded = btoa(unescape(encodeURIComponent(payload))); }
-    catch (e) { encoded = btoa(payload); }
-    const full = url + '?data=' + encodeURIComponent(encoded);
-    // sendBeacon survives page unload; falls back to keepalive fetch.
-    try {
-      if (navigator.sendBeacon) {
-        navigator.sendBeacon(full);
-        return;
-      }
-    } catch (e) {}
-    try {
-      fetch(full, { method: 'GET', mode: 'no-cors', keepalive: true, cache: 'no-store' });
-    } catch (e) {}
-  },
-};
-
-/* =========================================================
    [JS-01] Constants — tiers, physics, palettes, container dims
    ========================================================= */
+'use strict';
 
 // Doll tier radii (in canvas px at the reference 360-wide canvas)
 const TIER_RADII = [14, 19, 25, 32, 40, 50, 62, 75, 90, 106, 124];
@@ -2087,15 +1990,12 @@ async function loadDailySeed() {
 }
 
 function setMode(m) {
-  const prev = state.mode;
   state.mode = m;
   save();
+  // Reset RNG so the queue starts deterministically from the daily seed
+  // even after switching modes mid-session.
   if (m === 'daily') dailyRng = mulberry32(dailySeed);
   document.querySelectorAll('.mode-pill').forEach(p => p.classList.toggle('active', p.getAttribute('data-mode') === m));
-  if (typeof MX !== 'undefined' && MX.ready) {
-    MX.track('Mode Switched', { from: prev, to: m });
-    MX.setSuper({ mode: m });
-  }
   newGame();
 }
 
@@ -2280,20 +2180,7 @@ function physicsStep() {
           markTierDot(newTier, true);
           if (newTier === 5) markMissionProgress('mission_merge_t6_done', true);  // T6 in 0-indexed === idx 5
         }
-        if (newTier > (state.bestTierEver || 0)) {
-          state.bestTierEver = newTier;
-          // Fire a "First Tier N" funnel event the very first time the
-          // player reaches each new milestone tier. Mixpanel funnels can
-          // then track e.g. % of players who reach Mother (T6) → Tsarina (T11).
-          if (typeof MX !== 'undefined' && MX.ready) {
-            MX.track('First Tier Reached', { tier: newTier, display_tier: newTier + 1 });
-            if (newTier === 10) MX.track('First Tsarina');
-          }
-        }
-        // First-merge milestone — only fires once ever.
-        if ((state.totalMergesEver || 0) === 0 && typeof MX !== 'undefined' && MX.ready) {
-          MX.track('First Merge');
-        }
+        if (newTier > (state.bestTierEver || 0)) state.bestTierEver = newTier;
         spawnParticles(mx, my, 10 + newTier * 2, getPalette(newTier).body, 1);
         spawnFloatScore(mx, my - 8, '+' + gain + (mult > 1 ? '  x' + mult.toFixed(1) : ''));
         playMergeSound(newTier);
@@ -2760,8 +2647,6 @@ let running = true;
 let score = 0;
 let mergeCount = 0;
 let lastTickMs = 0;
-let gameStartedAtMs = performance.now();
-let gameRevived = false;
 
 function addScore(n) {
   score += n;
@@ -2964,7 +2849,6 @@ function doUndo() {
   save();
   toast(t('undo_used') + ' (' + state.undos + ')');
   tgHaptic('light');
-  if (typeof MX !== 'undefined') MX.track('Booster Used', { kind: 'undo' });
 }
 
 canvas.addEventListener('pointerdown', onPointerDown, { passive: false });
@@ -3021,7 +2905,6 @@ function setActiveBooster(name) {
 hammerBtn.addEventListener('click', () => {
   if ((state.hammers || 0) <= 0) {
     toast('No hammers — buy in Shop');
-    if (typeof MX !== 'undefined') MX.track('Booster Tap Empty', { kind: 'hammer' });
     return;
   }
   if (!running) return;
@@ -3032,7 +2915,6 @@ hammerBtn.addEventListener('click', () => {
 shakeBtn.addEventListener('click', () => {
   if ((state.shakes || 0) <= 0) {
     toast('No shakes — buy in Shop');
-    if (typeof MX !== 'undefined') MX.track('Booster Tap Empty', { kind: 'shake' });
     return;
   }
   if (!running) return;
@@ -3040,7 +2922,6 @@ shakeBtn.addEventListener('click', () => {
   doShake();
   save(); refreshBoosterHUD();
   tgHaptic('medium');
-  if (typeof MX !== 'undefined') MX.track('Booster Used', { kind: 'shake' });
 });
 
 rainbowBtn.addEventListener('click', () => {
@@ -3073,7 +2954,6 @@ rainbowBtn.addEventListener('click', () => {
   save(); refreshBoosterHUD();
   tgHaptic('medium');
   toast('🌈 Rainbow doll armed — drop it on any doll!');
-  if (typeof MX !== 'undefined') MX.track('Booster Used', { kind: 'rainbow' });
 });
 
 function doShake() {
@@ -3117,7 +2997,6 @@ function handleHammerHit(e) {
       state.hammers = Math.max(0, (state.hammers || 0) - 1);
       setActiveBooster(null);
       save();
-      if (typeof MX !== 'undefined') MX.track('Booster Used', { kind: 'hammer', target_tier: b.tier });
       // Sweep the merged bodies out
       for (let i = world.length - 1; i >= 0; i--) if (world[i].merged) world.splice(i, 1);
       tgHaptic('medium');
@@ -3345,32 +3224,6 @@ function endGame() {
   }
   document.getElementById('best-score').textContent = state.mode === 'daily' ? (state.dailyBestToday || 0) : (state.best || 0);
   checkAchievements();
-  // Analytics: Game Ended with all the key signals for cohort analysis
-  if (typeof MX !== 'undefined' && MX.ready) {
-    const durSec = Math.round((performance.now() - gameStartedAtMs) / 1000);
-    MX.track('Game Ended', {
-      mode: state.mode || 'endless',
-      score: score,
-      merges: mergeCount,
-      best_tier_this_run: Math.max(0, ...world.map(b => b.tier), state.bestTierEver || 0),
-      duration_sec: durSec,
-      revived: gameRevived,
-      new_best: !!wasBest,
-      best_combo_this_run: state.bestComboEver || 0,
-    });
-    MX.incrementProfile({
-      total_games_ever: 1,
-      lifetime_score: score,
-    });
-    MX.setProfile({
-      last_played_at: new Date().toISOString(),
-      best_score: state.best || 0,
-      best_tier: state.bestTierEver || 0,
-      streak: state.streak || 0,
-      total_games_ever: state.totalGamesEver || 0,
-      total_merges_ever: state.totalMergesEver || 0,
-    });
-  }
   save();
   submitScore(score);
   setTimeout(() => showGameOverModal(wasBest), 350);
@@ -3414,29 +3267,12 @@ function doRevive() {
   // Reset resting frames on remaining
   for (const b of world) b.restingFrames = 0;
   running = true;
-  gameRevived = true;
   carrier = null;
   spawnCarrier();
   toast(t('revive_used'));
-  if (typeof MX !== 'undefined' && MX.ready) MX.track('Booster Used', { kind: 'revive' });
 }
 
 function newGame() {
-  // Analytics: Game Started — track mode + cumulative context so we
-  // can compute average score / tier / duration per session in Mixpanel.
-  if (typeof MX !== 'undefined' && MX.ready) {
-    MX.track('Game Started', {
-      mode: state.mode || 'endless',
-      revives_in_pocket: state.revives || 0,
-      hammers_in_pocket: state.hammers || 0,
-      shakes_in_pocket: state.shakes || 0,
-      rainbows_in_pocket: state.rainbows || 0,
-      undos_in_pocket: state.undos || 0,
-    });
-    MX.setSuper({ mode: state.mode || 'endless' });
-  }
-  gameStartedAtMs = performance.now();
-  gameRevived = false;
   world.length = 0;
   particles.length = 0;
   floats.length = 0;
@@ -3528,7 +3364,6 @@ function switchTab(name) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-tab') === name));
   state.activeTab = name;
   save();
-  if (typeof MX !== 'undefined' && MX.ready) MX.track('Tab View', { tab: name });
   if (name === 'shop') renderShop();
   if (name === 'earn') {
     renderBattlePassBanner();
@@ -3588,7 +3423,6 @@ const SKU_DISPLAY = [
 ];
 
 function renderShop() {
-  if (typeof MX !== 'undefined' && MX.ready) MX.track('Shop Viewed');
   const grid = document.getElementById('sku-grid');
   grid.innerHTML = '';
   for (const s of SKU_DISPLAY) {
@@ -3609,29 +3443,17 @@ function renderShop() {
 
 async function buySku(sku) {
   const initData = getInitData();
-  const skuMeta = SKU_DISPLAY.find(s => s.id === sku) || { price: 0 };
-  if (typeof MX !== 'undefined' && MX.ready) {
-    MX.track('IAP Buy Tapped', { sku, price_stars: skuMeta.price });
-  }
-  if (!initData || !tg) {
-    toast(t('iap_unavailable'));
-    if (typeof MX !== 'undefined' && MX.ready) MX.track('IAP Unavailable', { sku });
-    return;
-  }
+  if (!initData || !tg) { toast(t('iap_unavailable')); return; }
   try {
     const r = await fetch('/api/create-invoice', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sku, initData }),
     });
     const d = await r.json();
-    if (!d.link) {
-      toast(d.error || 'IAP error');
-      if (typeof MX !== 'undefined' && MX.ready) MX.track('IAP Invoice Failed', { sku, error: d.error || 'no link' });
-      return;
-    }
-    if (typeof MX !== 'undefined' && MX.ready) MX.track('IAP Invoice Opened', { sku, price_stars: skuMeta.price });
+    if (!d.link) { toast(d.error || 'IAP error'); return; }
     tg.openInvoice(d.link, async (status) => {
       if (status === 'paid') {
+        // Poll for the grant payload
         for (let i = 0; i < 6; i++) {
           await sleep(400);
           const rr = await fetch('/api/poll-purchases', {
@@ -3649,30 +3471,11 @@ async function buySku(sku) {
         save();
         hudUpdate();
         tgHaptic('success');
-        if (typeof MX !== 'undefined' && MX.ready) {
-          MX.track('IAP Success', {
-            sku, price_stars: skuMeta.price, total_iaps_ever: state.totalIapsEver,
-          });
-          MX.incrementProfile({
-            total_iaps_ever: 1,
-            total_stars_spent: skuMeta.price || 0,
-          });
-          MX.setProfile({
-            last_iap_at: new Date().toISOString(),
-            last_iap_sku: sku,
-          });
-        }
       } else if (status === 'failed') {
         toast('Payment failed');
-        if (typeof MX !== 'undefined' && MX.ready) MX.track('IAP Failed', { sku, price_stars: skuMeta.price });
-      } else if (status === 'cancelled') {
-        if (typeof MX !== 'undefined' && MX.ready) MX.track('IAP Cancelled', { sku, price_stars: skuMeta.price });
       }
     });
-  } catch (e) {
-    toast('Network error');
-    if (typeof MX !== 'undefined' && MX.ready) MX.track('IAP Network Error', { sku });
-  }
+  } catch (e) { toast('Network error'); }
 }
 
 function applyGrant(g) {
@@ -3760,9 +3563,6 @@ document.getElementById('chest-claim').onclick = () => {
   toast('+' + reward + ' 💎' + multiplierLabel(mult));
   playClaimSound();
   tgHaptic('success');
-  if (typeof MX !== 'undefined' && MX.ready) {
-    MX.track('Daily Chest Claimed', { day: d, reward, multiplier: mult });
-  }
 };
 
 const MISSIONS = [
@@ -3848,9 +3648,6 @@ function doClaimMission(m) {
   toast('+' + reward + ' 💎' + multiplierLabel(mult));
   playClaimSound();
   tgHaptic('success');
-  if (typeof MX !== 'undefined' && MX.ready) {
-    MX.track('Mission Claimed', { id: m.id, reward, multiplier: mult });
-  }
 }
 
 /* =========================================================
@@ -3949,10 +3746,6 @@ function doSpin() {
   if (!canSpinToday()) { toast('Come back tomorrow!'); return; }
   state.lastSpinYMD = ymd();
   state.spinCount = (state.spinCount || 0) + 1;
-  if (typeof MX !== 'undefined' && MX.ready) {
-    MX.track('Daily Spin', { spin_count_lifetime: state.spinCount });
-    MX.incrementProfile({ total_spins_ever: 1 });
-  }
   save(); renderSpinSection();
   const idx = pickWeightedPrize();
   const arc = (Math.PI * 2) / SPIN_PRIZES.length;
@@ -3997,9 +3790,6 @@ function applySpinPrize(p) {
   if (p.kind === 'undo')    grant.undos = p.n;
   if (p.kind === 'revive')  grant.revives = p.n;
   if (p.kind === 'jackpot') grant = { gems: 500, revives: 1, hammers: 2 };
-  if (typeof MX !== 'undefined' && MX.ready) {
-    MX.track('Daily Spin Prize', { kind: p.kind, amount: p.n, label: p.label });
-  }
   applyGrant(grant);
   save(); hudUpdate(); renderSpinSection();
   setTimeout(() => {
@@ -4068,11 +3858,6 @@ function checkAchievements() {
         claimedYMD: ymd(),
       };
       granted = true;
-      if (typeof MX !== 'undefined' && MX.ready) {
-        MX.track('Achievement Unlocked', {
-          id: a.id, title: a.t, reward: grant, multiplier: mult,
-        });
-      }
       // Stagger toasts so multiple simultaneous unlocks (e.g., reach_t6 +
       // merges_100 in the same big game) don't stack on top of each other.
       const myDelay = delayMs;
@@ -4261,9 +4046,6 @@ function claimMilestone(m) {
   toast('+' + reward + ' 💎' + multiplierLabel(mult));
   playClaimSound();
   tgHaptic('success');
-  if (typeof MX !== 'undefined' && MX.ready) {
-    MX.track('Streak Milestone Claimed', { days: m.days, reward, multiplier: mult });
-  }
 }
 
 /* =========================================================
@@ -4471,7 +4253,6 @@ async function generateShareCard(finalScore, bestTier) {
 
 async function shareScore() {
   const finalScore = score || state.best || 0;
-  if (typeof MX !== 'undefined' && MX.ready) MX.track('Share Tapped', { score: finalScore });
   const text = t('share_text').replace('{score}', finalScore);
   // v0.3.14: the shared URL now points at a wrapper HTML page
   // (/share/<id>) that renders the score card as og:image AND ships a
@@ -4516,28 +4297,17 @@ function renderSkinPicker(container) {
       (!owned ? ' locked' : '');
     tile.innerHTML = `<div class="em">${s.icon}</div><div>${s.name}</div>` + (!owned ? '<div style="font-size:9px">🔒 Shop</div>' : '');
     tile.onclick = () => {
-      if (!owned) {
-        switchTab('shop'); hideModal();
-        if (typeof MX !== 'undefined') MX.track('Skin Locked Tap', { skin: s.id });
-        return;
-      }
-      const prev = state.activeSkin;
+      if (!owned) { switchTab('shop'); hideModal(); return; }
       state.activeSkin = s.id;
       save();
       renderSkinPicker(container);
       buildTierDots();
-      if (typeof MX !== 'undefined') {
-        MX.track('Skin Changed', { from: prev, to: s.id });
-        MX.setProfile({ active_skin: s.id });
-        MX.setSuper({ active_skin: s.id });
-      }
     };
     container.appendChild(tile);
   }
 }
 
 document.getElementById('btn-settings').onclick = () => {
-  if (typeof MX !== 'undefined' && MX.ready) MX.track('Settings Opened');
   const body = document.getElementById('modal-body');
   body.innerHTML = `
     <h3>${t('settings')}</h3>
@@ -4901,9 +4671,6 @@ function ftueGoTo(i) {
   ftueStepStartMs = performance.now();
   ftueRenderChrome();
   tgHaptic('select');
-  if (typeof MX !== 'undefined' && MX.ready) {
-    MX.track('FTUE Step Viewed', { step: ftueIdx, key: FTUE_STEPS[ftueIdx].key });
-  }
 }
 
 function openFtue() {
@@ -4912,32 +4679,21 @@ function openFtue() {
   ftueStepStartMs = performance.now();
   ftueRenderChrome();
   if (!ftueRafId) ftueLoop();
-  if (typeof MX !== 'undefined' && MX.ready) {
-    MX.track('FTUE Started');
-    MX.track('FTUE Step Viewed', { step: 0, key: FTUE_STEPS[0].key });
-  }
 }
 
-function closeFtue(reason) {
+function closeFtue() {
   document.getElementById('ftue-shade').classList.remove('show');
   if (ftueRafId) { cancelAnimationFrame(ftueRafId); ftueRafId = 0; }
-  const wasDone = !!state.ftueDone;
   state.ftueDone = true;
   state.welcomed = true;
   state.firstSeenAt = state.firstSeenAt || Date.now();
   save();
-  if (typeof MX !== 'undefined' && MX.ready && !wasDone) {
-    MX.track(reason === 'skip' ? 'FTUE Skipped' : 'FTUE Completed', {
-      last_step: ftueIdx,
-    });
-    MX.setProfile({ ftue_done: true, ftue_completed_at: new Date().toISOString() });
-  }
 }
 
-document.getElementById('ftue-skip').onclick = () => closeFtue('skip');
+document.getElementById('ftue-skip').onclick = closeFtue;
 document.getElementById('ftue-back').onclick = () => ftueGoTo(ftueIdx - 1);
 document.getElementById('ftue-next').onclick = () => {
-  if (ftueIdx >= FTUE_STEPS.length - 1) { closeFtue('finished'); tgHaptic('success'); }
+  if (ftueIdx >= FTUE_STEPS.length - 1) { closeFtue(); tgHaptic('success'); }
   else ftueGoTo(ftueIdx + 1);
 };
 
@@ -4962,74 +4718,6 @@ function openFtueIfFirst() {
   buildTierDots();
   fitCanvas();
   rolloverDailyIfNeeded();
-  // Mixpanel — fetch token from /api/flags, identify the player, fire
-  // session-start with rich super properties so retention cohorts and
-  // funnel analyses work out of the box.
-  try {
-    const flagsRes = await fetch('/api/flags');
-    const flags = await flagsRes.json();
-    const tgUser = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) || null;
-    const distinctId = tgUser ? String(tgUser.id) : null;
-    MX.init(flags.mixpanel_token, distinctId, tgUser ? {
-      $first_name: tgUser.first_name || '',
-      $last_name: tgUser.last_name || '',
-      $name: tgUser.first_name || tgUser.username || ('User ' + tgUser.id),
-      username: tgUser.username || '',
-      telegram_id: tgUser.id,
-      language: tgUser.language_code || 'en',
-      is_premium: !!tgUser.is_premium,
-      platform: (tg && tg.platform) || 'web',
-      app_version: MX_VERSION,
-      first_seen_at: state.firstSeenAt ? new Date(state.firstSeenAt).toISOString() : new Date().toISOString(),
-    } : null);
-    MX.setSuper({
-      mode: state.mode || 'endless',
-      active_skin: state.activeSkin || 'classic',
-      lang: state.settings && state.settings.lang || 'en',
-    });
-    // Determine returning vs new for retention day-N tagging
-    const today = ymd();
-    const isReturning = state.lastPlayedYMD && state.lastPlayedYMD !== today;
-    MX.track('Session Start', {
-      streak: state.streak || 0,
-      gems: state.gems || 0,
-      best_score: state.best || 0,
-      best_tier: state.bestTierEver || 0,
-      total_games_ever: state.totalGamesEver || 0,
-      is_returning: !!isReturning,
-      day_of_week: new Date().getUTCDay(),
-      hour_utc: new Date().getUTCHours(),
-      is_fullscreen: !!(tg && tg.isFullscreen),
-    });
-    // Sync the player's cumulative state to Mixpanel user profile so
-    // we can build cohorts based on gems / streak / best score.
-    MX.setProfile({
-      gems: state.gems || 0,
-      best_score: state.best || 0,
-      best_tier: state.bestTierEver || 0,
-      best_combo: state.bestComboEver || 0,
-      streak: state.streak || 0,
-      total_games_ever: state.totalGamesEver || 0,
-      total_merges_ever: state.totalMergesEver || 0,
-      total_iaps_ever: state.totalIapsEver || 0,
-      skins_owned: (state.skins || []).length,
-      ftue_done: !!state.ftueDone,
-      mode_preferred: state.mode || 'endless',
-      last_seen_at: new Date().toISOString(),
-    });
-    // Heartbeat every 60s so Mixpanel sees real session duration
-    setInterval(() => MX.track('Session Heartbeat'), 60 * 1000);
-    // Session End on page hide / unload — sendBeacon survives the unload.
-    const fireSessionEnd = () => {
-      const durSec = Math.round((Date.now() - MX.sessionStartMs) / 1000);
-      MX.track('Session End', { duration_sec: durSec });
-    };
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') fireSessionEnd();
-    });
-    window.addEventListener('pagehide', fireSessionEnd);
-    window.addEventListener('beforeunload', fireSessionEnd);
-  } catch (e) { /* analytics is best-effort */ }
   // Load the daily seed FIRST so the deterministic queue is ready if the
   // saved mode is 'daily'. Falls back to a default seed if offline.
   await loadDailySeed();
