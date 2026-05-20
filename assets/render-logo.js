@@ -35,9 +35,6 @@ function drawMatryoshka(c, x, y, r) {
   c.save();
   c.translate(x, y);
 
-  c.fillStyle = 'rgba(0,0,0,0.22)';
-  c.beginPath(); c.ellipse(0, r*0.85, r*0.85, r*0.18, 0, 0, Math.PI*2); c.fill();
-
   c.fillStyle = pal.body;
   c.beginPath(); c.ellipse(0, 0, r*0.95, r, 0, 0, Math.PI*2); c.fill();
 
