@@ -3139,62 +3139,13 @@ const ACHIEVEMENTS = [
 ];
 
 function checkAchievements() {
-  // v0.3.7 — auto-grant gems on unlock. Players were getting a toast
-  // saying "🏅 +60 💎" but the gem counter stayed put because the toast
-  // only marked the achievement as unlocked — they had to manually
-  // navigate to the Earn tab and tap Claim to actually get the gems.
-  // Confusing and friction-y. Now: unlock = instant grant + pulse + sfx.
-  let granted = false;
-  let delayMs = 800;
   for (const a of ACHIEVEMENTS) {
     if (state.achievements[a.id]) continue;
     if (a.check && a.check()) {
-      const mult = rewardMultiplier();
-      const grant = a.reward * mult;
-      state.gems = (state.gems || 0) + grant;
-      state.achievements[a.id] = {
-        unlockedYMD: ymd(),
-        claimed: true,
-        claimedYMD: ymd(),
-      };
-      granted = true;
-      // Stagger toasts so multiple simultaneous unlocks (e.g., reach_t6 +
-      // merges_100 in the same big game) don't stack on top of each other.
-      const myDelay = delayMs;
-      delayMs += 1400;
-      const multSuffix = mult > 1 ? ' (' + mult + '×)' : '';
-      setTimeout(() => {
-        toast('🏅 ' + a.t + ' · +' + grant + ' 💎' + multSuffix);
-        hudUpdate();           // pulse the gem pill
-        playClaimSound();
-        tgHaptic('success');
-      }, myDelay);
+      state.achievements[a.id] = { unlockedYMD: ymd() };
+      // Pop a small celebration after the game-over modal lands
+      setTimeout(() => toast('🏅 ' + a.t + ' · +' + a.reward + ' 💎'), 800);
     }
-  }
-  if (granted) save();
-}
-
-// One-shot migration for players who unlocked achievements before v0.3.7
-// and never tapped Claim. They have state.achievements[id] = {unlockedYMD}
-// without a `claimed` flag. Retroactively grant the gems on next boot so
-// their account state matches what the toasts told them they earned.
-function migratePastAchievements() {
-  let granted = 0;
-  for (const a of ACHIEVEMENTS) {
-    const rec = state.achievements[a.id];
-    if (rec && !rec.claimed) {
-      state.gems = (state.gems || 0) + a.reward;
-      state.achievements[a.id] = Object.assign({}, rec, { claimed: true, claimedYMD: ymd() });
-      granted += a.reward;
-    }
-  }
-  if (granted > 0) {
-    save();
-    setTimeout(() => {
-      toast('🏅 +' + granted + ' 💎 from past achievements');
-      hudUpdate();
-      playClaimSound();
-    }, 2400);
   }
 }
 
@@ -4028,11 +3979,6 @@ function openFtueIfFirst() {
     } catch (e) {}
   }
   requestAnimationFrame(gameTick);
-  // Retroactively claim any pre-v0.3.7 achievements that were unlocked
-  // but never tapped — players assumed the "+N 💎" toast meant the gems
-  // had already landed (now they do, but this fixes accounts created
-  // before that change).
-  migratePastAchievements();
   // Schedule a couple of follow-up fitCanvas calls — Telegram's safe-area
   // insets sometimes arrive a few hundred ms after initial paint, and we
   // want the jar to re-snap to the corrected available height.
