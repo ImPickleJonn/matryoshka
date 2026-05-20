@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Matryoshka — Logo / Avatar Export</title>
+<style>
+  body {
+    margin: 0; padding: 24px;
+    background: #1a0610; color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    text-align: center;
+  }
+  h1 { margin: 0 0 6px; font-size: 22px; }
+  p { color: #d9b8be; font-size: 13px; margin: 4px 0 18px; }
+  .stage { display: flex; flex-wrap: wrap; justify-content: center; gap: 18px; }
+  .card {
+    background: #2a0a14; border-radius: 14px;
+    padding: 14px; border: 1px solid #5a1a26;
+  }
+  .card h2 { margin: 0 0 8px; font-size: 14px; letter-spacing: 1px; opacity: 0.78; }
+  canvas {
+    display: block; border-radius: 14px; box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+    background: #000; max-width: 100%; height: auto;
+  }
+  .btns {
+    display: flex; flex-wrap: wrap; gap: 6px; justify-content: center;
+    margin-top: 12px;
+  }
+  .btn {
+    background: linear-gradient(180deg, #ffd84d 0%, #f5b300 100%);
+    color: #2b0a10; font-weight: 800; border: none;
+    padding: 8px 14px; border-radius: 8px; cursor: pointer;
+    font-size: 13px;
+  }
+  .btn:active { transform: translateY(1px); }
+  .btn.ghost { background: #5a1a26; color: #fff; }
+  .skin-row {
+    display: flex; gap: 6px; justify-content: center;
+    margin: 14px 0 6px;
+  }
+  .skin-row button {
+    background: #2a0a14; border: 1px solid #5a1a26;
+    color: #fff; font-weight: 700; font-size: 12px;
+    padding: 6px 12px; border-radius: 8px; cursor: pointer;
+  }
+  .skin-row button.active {
+    background: #fdc500; color: #2b0a10; border-color: #fdc500;
+  }
+  .row { margin: 18px 0 0; }
+  small { color: #886; }
+</style>
+</head>
+<body>
+  <h1>🪆 Matryoshka — Logo Export</h1>
+  <p>Click a size to download a PNG. Use <strong>640×640</strong> for the Telegram bot avatar and Mini App icon.</p>
+
+  <div class="skin-row" id="skin-row">
+    <button data-skin="classic" class="active">Classic</button>
+    <button data-skin="khokhloma">Khokhloma</button>
+    <button data-skin="gzhel">Gzhel</button>
+    <button data-skin="neon">Neon</button>
+    <button data-skin="wood">Wood</button>
+  </div>
+  <small>Pick a skin to preview. Download renders at full resolution with the same art used in the game.</small>
+
+  <div class="row stage">
+    <div class="card">
+      <h2>AVATAR — Square Tsarina</h2>
+      <canvas id="avatar" width="320" height="320"></canvas>
+      <div class="btns">
+        <button class="btn" data-dl="avatar" data-size="512">512×512</button>
+        <button class="btn" data-dl="avatar" data-size="640">640×640</button>
+        <button class="btn" data-dl="avatar" data-size="1024">1024×1024</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>LOGO — With Wordmark</h2>
+      <canvas id="wordmark" width="320" height="400"></canvas>
+      <div class="btns">
+        <button class="btn" data-dl="wordmark" data-size="800">800×1000</button>
+        <button class="btn" data-dl="wordmark" data-size="1080">1080×1350</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+'use strict';
+
+// ===== Palette mirrored exactly from index.html ====================
+const TIER_PALETTE = [
+  { body:'#e63946', scarf:'#b21f3a', face:'#ffe6c8', apron:'#ffd166', accent:'#1d3557' },
+  { body:'#f4a261', scarf:'#d17a3a', face:'#ffe6c8', apron:'#fff1c2', accent:'#603c10' },
+  { body:'#e9c46a', scarf:'#b8902f', face:'#ffe6c8', apron:'#fff5b8', accent:'#5a4011' },
+  { body:'#8ab17d', scarf:'#3f7d44', face:'#ffe6c8', apron:'#f5e8a8', accent:'#2c4329' },
+  { body:'#2a9d8f', scarf:'#176d62', face:'#ffe6c8', apron:'#bff0e2', accent:'#0e3a35' },
+  { body:'#457b9d', scarf:'#22506e', face:'#ffe6c8', apron:'#c4e2f3', accent:'#0a2c44' },
+  { body:'#9b5de5', scarf:'#6c2eb5', face:'#ffe6c8', apron:'#e1cbff', accent:'#391d6d' },
+  { body:'#f15bb5', scarf:'#b8328c', face:'#ffe6c8', apron:'#ffd0e7', accent:'#6e1748' },
+  { body:'#f72585', scarf:'#a8125a', face:'#ffe6c8', apron:'#ffc3da', accent:'#530a31' },
+  { body:'#fdc500', scarf:'#b88317', face:'#ffe6c8', apron:'#fff3b8', accent:'#5a3e08' },
+  { body:'#f1faee', scarf:'#a51d30', face:'#ffe6c8', apron:'#ffb3b3', accent:'#a51d30', crown:true },
+];
+
+const SKINS = {
+  classic: null,
+  khokhloma: function(tier, base) {
+    const scarves = ['#c08018','#d4961a','#e8a420','#f2b32a','#fdc500'];
+    return { body:'#1a0d0d', scarf:scarves[tier%scarves.length], face:'#f4dba0', apron:'#7a4818', accent:'#e63946', crown:base.crown };
+  },
+  gzhel: function(tier, base) {
+    const blues = ['#1d3557','#2a4870','#3a5b8e','#4a72ac','#5a8ac9'];
+    return { body:'#f4f6fa', scarf:blues[tier%blues.length], face:'#fff4dd', apron:'#e0e9f5', accent:'#1d3557', crown:base.crown };
+  },
+  neon: function(tier, base) {
+    const bodies = ['#ff2e63','#ff8c00','#ffd400','#39ff14','#00f5d4','#00bbf9','#9b5de5','#f15bb5','#f72585','#fdc500','#ffffff'];
+    const acc = ['#7a002f','#702a00','#5a4a00','#0a4500','#003f3a','#003f6e','#1f0640','#400a26','#3c0820','#5a3e08','#a51d30'];
+    return { body:bodies[tier], scarf:acc[tier], face:'#fff8ff', apron:'#1a1a2a', accent:'#ffffff', crown:base.crown };
+  },
+  wood: function(tier, base) {
+    const woods = ['#c69367','#b8794a','#a55f30','#8c4a20','#7a3f1c','#6d3618','#5b2c14','#4e2510','#3f1d0d','#df8b4d','#fae0bf'];
+    const sc = ['#7a3f1c','#5b2c14','#3f1d0d','#5b2c14','#7a3f1c','#a55f30','#c69367','#df8b4d','#fae0bf','#a51d30','#a51d30'];
+    return { body:woods[tier], scarf:sc[tier], face:'#fff0d4', apron:'#e8c69a', accent:'#2e1a0c', crown:base.crown };
+  },
+};
+
+let activeSkin = 'classic';
+function getPalette(tier) {
+  const base = TIER_PALETTE[tier];
+  const fn = SKINS[activeSkin];
+  return fn ? fn(tier, base) : base;
+}
+
+// ===== drawMatryoshka — ported verbatim from index.html =============
+function drawMatryoshka(c, x, y, r, tier, angle, scale) {
+  const pal = getPalette(tier);
+  c.save();
+  c.translate(x, y);
+  c.rotate(angle || 0);
+  if (scale) c.scale(scale, scale);
+
+  c.fillStyle = 'rgba(0,0,0,0.22)';
+  c.beginPath(); c.ellipse(0, r*0.85, r*0.85, r*0.18, 0, 0, Math.PI*2); c.fill();
+
+  c.fillStyle = pal.body;
+  c.beginPath(); c.ellipse(0, 0, r*0.95, r, 0, 0, Math.PI*2); c.fill();
+
+  c.fillStyle = pal.apron;
+  c.beginPath(); c.ellipse(0, r*0.18, r*0.7, r*0.62, 0, 0, Math.PI*2); c.fill();
+
+  c.fillStyle = pal.scarf;
+  c.beginPath();
+  c.moveTo(-r*0.95, -r*0.05);
+  c.quadraticCurveTo(0, -r*1.15, r*0.95, -r*0.05);
+  c.quadraticCurveTo(r*0.4, -r*0.5, 0, -r*0.45);
+  c.quadraticCurveTo(-r*0.4, -r*0.5, -r*0.95, -r*0.05);
+  c.fill();
+
+  c.fillStyle = pal.face;
+  c.beginPath(); c.ellipse(0, -r*0.4, r*0.36, r*0.28, 0, 0, Math.PI*2); c.fill();
+
+  c.fillStyle = pal.accent;
+  c.beginPath();
+  c.ellipse(-r*0.13, -r*0.4, r*0.04, r*0.06, 0, 0, Math.PI*2);
+  c.ellipse( r*0.13, -r*0.4, r*0.04, r*0.06, 0, 0, Math.PI*2);
+  c.fill();
+
+  c.fillStyle = 'rgba(231,57,57,0.55)';
+  c.beginPath();
+  c.ellipse(-r*0.20, -r*0.32, r*0.06, r*0.05, 0, 0, Math.PI*2);
+  c.ellipse( r*0.20, -r*0.32, r*0.06, r*0.05, 0, 0, Math.PI*2);
+  c.fill();
+
+  c.strokeStyle = pal.accent;
+  c.lineWidth = Math.max(1, r*0.025);
+  c.beginPath();
+  c.arc(0, -r*0.30, r*0.08, 0.1*Math.PI, 0.9*Math.PI);
+  c.stroke();
+
+  // Floral motif — for the avatar Tsarina (tier 10) we always draw the full
+  // 5-petal flower because the silhouette reads at small avatar sizes.
+  c.fillStyle = pal.scarf;
+  const fr = r*0.13;
+  c.beginPath(); c.arc(0, r*0.22, fr, 0, Math.PI*2); c.fill();
+  c.fillStyle = pal.accent;
+  c.beginPath(); c.arc(0, r*0.22, fr*0.5, 0, Math.PI*2); c.fill();
+  if (tier >= 4) {
+    c.fillStyle = pal.body;
+    for (let i = 0; i < 5; i++) {
+      const a = i * (Math.PI*2/5) - Math.PI/2;
+      c.beginPath();
+      c.ellipse(Math.cos(a)*fr*1.4, r*0.22 + Math.sin(a)*fr*1.4, fr*0.5, fr*0.3, a + Math.PI/2, 0, Math.PI*2);
+      c.fill();
+    }
+    c.fillStyle = pal.scarf;
+    c.beginPath(); c.arc(0, r*0.22, fr*0.55, 0, Math.PI*2); c.fill();
+    c.fillStyle = pal.accent;
+    c.beginPath(); c.arc(0, r*0.22, fr*0.25, 0, Math.PI*2); c.fill();
+  }
+
+  c.strokeStyle = pal.accent;
+  c.lineWidth = Math.max(1, r*0.03);
+  c.beginPath(); c.ellipse(0, 0, r*0.95, r, 0, 0, Math.PI*2); c.stroke();
+
+  c.beginPath();
+  c.moveTo(-r*0.95, -r*0.05);
+  c.quadraticCurveTo(-r*0.4, -r*0.5, 0, -r*0.45);
+  c.quadraticCurveTo(r*0.4, -r*0.5, r*0.95, -r*0.05);
+  c.stroke();
+
+  if (pal.crown) {
+    c.fillStyle = '#fdc500';
+    c.beginPath();
+    c.moveTo(-r*0.35, -r*0.95);
+    c.lineTo(-r*0.22, -r*1.18);
+    c.lineTo(-r*0.08, -r*1.02);
+    c.lineTo(0,       -r*1.22);
+    c.lineTo( r*0.08, -r*1.02);
+    c.lineTo( r*0.22, -r*1.18);
+    c.lineTo( r*0.35, -r*0.95);
+    c.closePath();
+    c.fill();
+    c.strokeStyle = '#b88317';
+    c.stroke();
+    c.fillStyle = '#e63946';
+    c.beginPath(); c.arc(0, -r*1.05, r*0.05, 0, Math.PI*2); c.fill();
+  }
+
+  c.restore();
+}
+
+// ===== Renderers ====================================================
+// Pick the Tsarina (tier 10, with crown) as the hero subject — the strongest
+// silhouette and the most "Russian" read for a brand avatar.
+const HERO_TIER = 10;
+
+function renderAvatar(c, size) {
+  c.clearRect(0, 0, size, size);
+  // Background radial gradient (matches splash screen)
+  const g = c.createRadialGradient(size/2, size*0.4, 10, size/2, size/2, size*0.78);
+  g.addColorStop(0, '#d12a44');
+  g.addColorStop(0.55, '#a01a30');
+  g.addColorStop(1, '#6f0f1f');
+  c.fillStyle = g; c.fillRect(0, 0, size, size);
+
+  // Subtle decorative ring near the edge
+  c.strokeStyle = 'rgba(255, 213, 122, 0.32)';
+  c.lineWidth = size * 0.012;
+  c.beginPath(); c.arc(size/2, size/2, size*0.46, 0, Math.PI*2); c.stroke();
+
+  // Sparkles scattered around
+  const sparkles = 28;
+  for (let i = 0; i < sparkles; i++) {
+    const angle = (i / sparkles) * Math.PI * 2 + 0.3;
+    const rad = size * (0.40 + 0.06 * Math.sin(i * 1.7));
+    const px = size/2 + Math.cos(angle) * rad;
+    const py = size*0.55 + Math.sin(angle) * rad * 0.85;
+    const sz = size * 0.005 * (1 + Math.sin(i*2.1));
+    c.fillStyle = i % 3 === 0 ? '#fdc500' : 'rgba(255,255,255,0.55)';
+    c.beginPath(); c.arc(px, py, Math.max(0.5, sz), 0, Math.PI*2); c.fill();
+  }
+
+  // Hero doll — Tsarina, centered slightly low so crown sits at proper height
+  const r = size * 0.30;
+  drawMatryoshka(c, size/2, size*0.56, r, HERO_TIER, 0, 1);
+}
+
+function renderWordmark(c, w, h) {
+  c.clearRect(0, 0, w, h);
+  // Bg gradient
+  const g = c.createRadialGradient(w/2, h*0.36, 10, w/2, h/2, h*0.7);
+  g.addColorStop(0, '#d12a44');
+  g.addColorStop(0.55, '#a01a30');
+  g.addColorStop(1, '#6f0f1f');
+  c.fillStyle = g; c.fillRect(0, 0, w, h);
+
+  // Decorative frame
+  c.strokeStyle = 'rgba(255, 213, 122, 0.6)';
+  c.lineWidth = h * 0.008;
+  const pad = h * 0.04;
+  c.strokeRect(pad, pad, w - pad*2, h - pad*2);
+
+  // Sparkles
+  for (let i = 0; i < 36; i++) {
+    const px = pad + Math.random() * (w - pad*2);
+    const py = pad + Math.random() * (h*0.65);
+    const sz = h * 0.004 * (1 + Math.random());
+    c.fillStyle = i % 3 === 0 ? '#fdc500' : 'rgba(255,255,255,0.5)';
+    c.beginPath(); c.arc(px, py, Math.max(0.6, sz), 0, Math.PI*2); c.fill();
+  }
+
+  // Hero doll
+  const r = h * 0.21;
+  drawMatryoshka(c, w/2, h*0.42, r, HERO_TIER, 0, 1);
+
+  // Wordmark
+  c.fillStyle = '#fff';
+  c.textAlign = 'center';
+  c.font = '800 ' + Math.round(h*0.075) + 'px -apple-system, system-ui, sans-serif';
+  c.shadowColor = 'rgba(0,0,0,0.45)';
+  c.shadowBlur = h * 0.02; c.shadowOffsetY = h * 0.005;
+  c.fillText('MATRYOSHKA', w/2, h * 0.86);
+  c.shadowBlur = 0; c.shadowOffsetY = 0;
+
+  // Tagline
+  c.fillStyle = '#ffe6c2';
+  c.font = '700 ' + Math.round(h*0.026) + 'px -apple-system, system-ui, sans-serif';
+  c.fillText('DROP · MERGE · REIGN', w/2, h * 0.93);
+}
+
+// ===== Live preview + download ======================================
+const avatarCanvas = document.getElementById('avatar');
+const wordmarkCanvas = document.getElementById('wordmark');
+
+function repaintPreviews() {
+  renderAvatar(avatarCanvas.getContext('2d'), avatarCanvas.width);
+  renderWordmark(wordmarkCanvas.getContext('2d'), wordmarkCanvas.width, wordmarkCanvas.height);
+}
+
+function downloadPng(which, size) {
+  const off = document.createElement('canvas');
+  if (which === 'avatar') {
+    off.width = off.height = size;
+    renderAvatar(off.getContext('2d'), size);
+  } else {
+    // wordmark canvas keeps 4:5 ratio
+    off.width = size;
+    off.height = Math.round(size * 1.25);
+    renderWordmark(off.getContext('2d'), off.width, off.height);
+  }
+  const a = document.createElement('a');
+  a.download = 'matryoshka-' + which + '-' + activeSkin + '-' + size + '.png';
+  a.href = off.toDataURL('image/png');
+  a.click();
+}
+
+// Wire skin picker
+document.querySelectorAll('.skin-row button').forEach(b => {
+  b.onclick = () => {
+    activeSkin = b.getAttribute('data-skin');
+    document.querySelectorAll('.skin-row button').forEach(x => x.classList.toggle('active', x === b));
+    repaintPreviews();
+  };
+});
+
+// Wire download buttons
+document.querySelectorAll('[data-dl]').forEach(b => {
+  b.onclick = () => downloadPng(b.getAttribute('data-dl'), parseInt(b.getAttribute('data-size'), 10));
+});
+
+repaintPreviews();
+</script>
+</body>
+</html>
