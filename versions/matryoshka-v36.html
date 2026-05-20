@@ -62,12 +62,7 @@
      [02] Header HUD
      ========================================================= */
   .topbar {
-    /* Offset bumped 6 → 14 in v0.3.12 to add extra buffer below the
-       Telegram chrome bottom edge. Combined with the 140px safe-top
-       floor in applySafeArea(), the topbar sits at minimum y=154 from
-       viewport top — comfortably below the X Close button on iPhone
-       14/15 Pro with Dynamic Island. */
-    position: absolute; top: calc(var(--tg-safe-top) + 14px); left: 8px; right: 8px;
+    position: absolute; top: calc(var(--tg-safe-top) + 6px); left: 8px; right: 8px;
     display: flex; align-items: center; justify-content: space-between;
     z-index: 30;
   }
@@ -98,9 +93,7 @@
      [03] Score banner
      ========================================================= */
   .score-row {
-    /* Shifted down 12px (50 → 62) in v0.3.12 — follows the topbar's
-       new lower position so the gap below it stays the same. */
-    position: absolute; top: calc(var(--tg-safe-top) + 62px);
+    position: absolute; top: calc(var(--tg-safe-top) + 50px);
     left: 0; right: 0;
     display: flex; align-items: center; justify-content: center;
     gap: 18px;
@@ -132,8 +125,7 @@
      [03b] Mode toggle (Endless / Daily)
      ========================================================= */
   .mode-row {
-    /* 102 → 116 in v0.3.12 — follows the score-row's new position. */
-    position: absolute; top: calc(var(--tg-safe-top) + 116px);
+    position: absolute; top: calc(var(--tg-safe-top) + 102px);
     left: 0; right: 0;
     display: flex; justify-content: center; gap: 4px;
     z-index: 24; pointer-events: auto;
@@ -160,8 +152,7 @@
      ========================================================= */
   #canvas-wrap {
     position: absolute;
-    /* 132 → 148 in v0.3.12 — follows the mode-row's new position. */
-    top: calc(var(--tg-safe-top) + 148px);
+    top: calc(var(--tg-safe-top) + 132px);
     /* CSS absolute positioning ignores the parent's padding — so we can't
        rely on #app's padding-bottom to push us above the bottom tabs. We
        explicitly subtract the tab height + safe-area-bottom here. */
@@ -1693,14 +1684,11 @@ function applySafeArea() {
   const platform = (tg && tg.platform) || '';
   const isIOS = platform === 'ios';
   const isAndroid = platform === 'android';
-  // v0.3.12: floor bumped 115 → 140 and removed the !isFullscreen
-  // exemption. The fullscreen check was unreliable — on some clients
-  // tg.isFullscreen returned a truthy value even though the chrome
-  // was still visible, causing my floor to be skipped and the
-  // topbar to tuck behind Telegram's X Close button. Always apply
-  // the floor; if fullscreen actually engages (chrome hidden), the
-  // ~80px of wasted top space is a much smaller cost than hidden UI.
-  if (top < 140) top = 140;
+  // v0.3.11: floor bumped 92 → 115 to clear the iPhone Dynamic Island
+  // chrome. On iPhone 14/15 Pro the Telegram chrome "X Close" button
+  // bottom edge sits at ~100-105px, so a 92px floor was placing our
+  // topbar (top: safe-top + 6) under the X Close.
+  if (!isFullscreen && top < 115) top = 115;
   let bottomCap;
   if (isAndroid) bottomCap = 8;
   else if (isIOS) bottomCap = 38;
