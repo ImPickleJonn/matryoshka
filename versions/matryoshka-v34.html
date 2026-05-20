@@ -26,11 +26,7 @@
     --warn: #e76f51;
     --pill: rgba(255, 255, 255, 0.16);
     --pill-strong: rgba(255, 255, 255, 0.28);
-    /* Tab bar height — reduced from 66px to 52px in v0.3.11 because the
-       old chunky tabs ate 12-15% of vertical screen space on flagship
-       phones and pushed the jar visually higher than it needed to be.
-       52 still fits a 20px emoji + 10px label comfortably. */
-    --tab-h: 52px;
+    --tab-h: 66px;
     --tg-safe-top: 0px;
     --tg-safe-bottom: 0px;
   }
@@ -272,14 +268,14 @@
   .tab-btn {
     flex: 1; display: flex; flex-direction: column;
     align-items: center; justify-content: center;
-    gap: 1px;
+    gap: 2px;
     border: none; background: transparent;
-    color: #93644f; font-size: 10px; font-weight: 700;
+    color: #93644f; font-size: 11px; font-weight: 700;
     cursor: pointer;
     letter-spacing: 0.5px;
     transition: color 0.15s ease;
   }
-  .tab-btn .em { font-size: 20px; line-height: 1; }
+  .tab-btn .em { font-size: 22px; line-height: 1; }
   .tab-btn.active { color: #a51d30; }
   .tab-btn.active .em { transform: scale(1.1); }
 
@@ -1684,11 +1680,7 @@ function applySafeArea() {
   const platform = (tg && tg.platform) || '';
   const isIOS = platform === 'ios';
   const isAndroid = platform === 'android';
-  // v0.3.11: floor bumped 92 → 115 to clear the iPhone Dynamic Island
-  // chrome. On iPhone 14/15 Pro the Telegram chrome "X Close" button
-  // bottom edge sits at ~100-105px, so a 92px floor was placing our
-  // topbar (top: safe-top + 6) under the X Close.
-  if (!isFullscreen && top < 115) top = 115;
+  if (!isFullscreen && top < 92) top = 92;
   let bottomCap;
   if (isAndroid) bottomCap = 8;
   else if (isIOS) bottomCap = 38;
