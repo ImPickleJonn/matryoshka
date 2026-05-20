@@ -939,7 +939,6 @@
       <div class="ph-banner" id="ph-banner"><span class="em">⚡</span><span id="ph-text">POWER HOUR · 2×</span></div>
       <div class="right">
         <button class="gear" id="btn-undo" title="Undo" style="display:none">↶</button>
-        <button class="gear" id="btn-share" title="Share">📤</button>
         <button class="gear" id="btn-settings" title="Settings">⚙</button>
       </div>
     </div>
@@ -1384,10 +1383,7 @@ const STRINGS = {
     undo_used: 'Undo!', no_undo: 'Nothing to undo', no_undos_left: 'No undos left',
     revive_used: 'Revive!',
     no_revives: 'No revives left',
-    // Includes the @bot mention so recipients see a clickable Telegram link
-    // to the game right inside the message body. The attached URL still
-    // renders an image preview + dedicated landing page with a PLAY button.
-    share_text: '🪆 I scored {score} on Matryoshka! 🎮 Beat me → @MatryoshkaGameBot',
+    share_text: '🪆 I scored {score} on Matryoshka! Try and beat me 👉',
     tier_names: ['Seed','Baby','Top','Girl','Aunt','Mother','Grandma','Merchant','Lady','Princess','Tsarina'],
     how_to_play: 'How to Play',
     spin_title: 'Wheel of Fortune',
@@ -1452,7 +1448,7 @@ const STRINGS = {
     undo_used: 'Отмена!', no_undo: 'Нечего отменять', no_undos_left: 'Закончились отмены',
     revive_used: 'Возрождение!',
     no_revives: 'Нет возрождений',
-    share_text: '🪆 Мой счёт в Матрёшке — {score}! 🎮 Победи меня → @MatryoshkaGameBot',
+    share_text: '🪆 Мой счёт в Матрёшке — {score}! Сможешь больше? 👉',
     tier_names: ['Зёрнышко','Малыш','Юла','Девочка','Тётя','Мама','Бабушка','Купчиха','Барыня','Княгиня','Царица'],
     how_to_play: 'Как играть',
     spin_title: 'Колесо Фортуны',
@@ -4292,12 +4288,10 @@ function openStats() {
       ${rows.map(([em, lbl, val]) => `<div class="stat-row"><span class="label">${em}  ${escapeHtml(lbl)}</span><span class="value">${escapeHtml(String(val))}</span></div>`).join('')}
     </div>
     <div class="modal-btns" style="margin-top:14px">
-      <button class="btn" id="m-stats-share">📤 ${t('share_my_score') || 'Share my best score'}</button>
       <button class="btn ghost" id="m-stats-close">Close</button>
     </div>
   `;
   document.getElementById('modal-shade').classList.add('show');
-  document.getElementById('m-stats-share').onclick = () => { hideModal(); shareScore(); };
   document.getElementById('m-stats-close').onclick = hideModal;
 }
 
@@ -4541,11 +4535,6 @@ function renderSkinPicker(container) {
     container.appendChild(tile);
   }
 }
-
-document.getElementById('btn-share').addEventListener('click', () => {
-  if (typeof MX !== 'undefined' && MX.ready) MX.track('Share Button Topbar Tapped');
-  shareScore();
-});
 
 document.getElementById('btn-settings').onclick = () => {
   if (typeof MX !== 'undefined' && MX.ready) MX.track('Settings Opened');
