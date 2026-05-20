@@ -527,25 +527,33 @@ app.get('/api/skus', (req, res) => {
 
 app.post('/api/create-invoice', async (req, res) => {
   if (!BOT_TOKEN) return res.status(500).json({ error: 'BOT_TOKEN not set on server' });
-  const { sku, initData } = req.body || {};
+  const { sku, initData, admin_test_price } = req.body || {};
   const user = validateInitData(initData);
   if (!user) return res.status(401).json({ error: 'invalid initData' });
   const item = SKUS[sku];
   if (!item) return res.status(400).json({ error: 'unknown sku' });
   if (item.adminOnly && !isAdmin(user.id)) return res.status(403).json({ error: 'sku is admin-only' });
-  const payload = JSON.stringify({ uid: user.id, sku, ts: Date.now() });
+  // Admin 1-star override — only honored if the requesting Telegram user
+  // matches the admin allow-list AND they explicitly asked for the override.
+  // Non-admins get the normal price regardless of what they send. The full
+  // grant still applies (so the admin gets the real entitlement) — only
+  // the invoice amount is dropped to 1⭐ for testing the payment funnel.
+  const useAdminPrice = !!admin_test_price && isAdmin(user.id);
+  const amount = useAdminPrice ? 1 : item.price;
+  const title = useAdminPrice ? '[ADMIN 1⭐] ' + item.title : item.title;
+  const payload = JSON.stringify({ uid: user.id, sku, ts: Date.now(), admin: useAdminPrice });
   try {
     const r = await fetch(`${TELEGRAM_API}/createInvoiceLink`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        title: item.title, description: item.description, payload,
+        title, description: item.description, payload,
         provider_token: '', currency: 'XTR',
-        prices: [{ label: item.title, amount: item.price }],
+        prices: [{ label: title, amount }],
       }),
     });
     const data = await r.json();
     if (!data.ok) return res.status(500).json({ error: data.description || 'telegram api failed' });
-    res.json({ link: data.result });
+    res.json({ link: data.result, admin_price_used: useAdminPrice, amount });
   } catch (e) { res.status(500).json({ error: String(e && e.message || e) }); }
 });
 

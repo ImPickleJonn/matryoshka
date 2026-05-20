@@ -429,48 +429,6 @@
   .sku-buy .star { color: #b88317; }
 
   /* =========================================================
-     [08b] Shop admin toggle — only visible to allow-listed admins.
-     Sits at the very top of the Shop panel. Lets the admin flip
-     between 1⭐ test pricing (to validate the invoice / payment /
-     grant flow cheaply) and real prices (to see what players see).
-     ========================================================= */
-  .admin-toggle-bar {
-    display: none;
-    background: linear-gradient(180deg, #2b0a10 0%, #4a0a1c 100%);
-    color: #fff;
-    border: 1.5px solid #fdc500;
-    border-radius: 14px;
-    padding: 10px 12px;
-    margin-bottom: 14px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.25);
-  }
-  .admin-toggle-bar.show { display: block; }
-  .admin-toggle-title {
-    font-size: 11px; font-weight: 800;
-    letter-spacing: 1.5px; opacity: 0.85;
-    margin-bottom: 8px;
-    color: #fdc500;
-  }
-  .admin-toggle-row { display: flex; gap: 6px; }
-  .admin-toggle-btn {
-    flex: 1;
-    background: rgba(255,255,255,0.08);
-    border: 1px solid rgba(255,213,122,0.4);
-    color: #ffe6c2;
-    font-size: 12px; font-weight: 800;
-    padding: 8px 4px; border-radius: 10px;
-    cursor: pointer; letter-spacing: 0.5px;
-  }
-  .admin-toggle-btn.active {
-    background: linear-gradient(180deg, #ffd84d 0%, #f5b300 100%);
-    color: #2b0a10;
-    border-color: #f5b300;
-    box-shadow: 0 2px 6px rgba(253,197,0,0.35);
-  }
-  .sku-card .sku-buy.admin-price { background: linear-gradient(180deg, #ff8c00 0%, #f72585 100%); color: #fff; }
-  .sku-card .sku-buy.admin-price .star { color: #fff5d2; }
-
-  /* =========================================================
      [09] Earn tab
      ========================================================= */
   .earn-section {
@@ -1027,13 +985,6 @@
     <div class="panel">
       <h2 data-i18n="shop_title">⭐ Shop</h2>
       <div class="sub" data-i18n="shop_sub">Telegram Stars only. No ads, ever.</div>
-      <div class="admin-toggle-bar" id="admin-toggle-bar">
-        <div class="admin-toggle-title">🛠 ADMIN PRICING MODE</div>
-        <div class="admin-toggle-row">
-          <button class="admin-toggle-btn active" id="admin-mode-test">1⭐ Test (admin)</button>
-          <button class="admin-toggle-btn" id="admin-mode-real">Real prices</button>
-        </div>
-      </div>
       <div class="sku-grid" id="sku-grid"></div>
     </div>
   </div>
@@ -3680,62 +3631,18 @@ const SKU_DISPLAY = [
     title_key: 'Season Pass · 30 days', desc: '2× daily rewards + skin + bonus' },
 ];
 
-// Admin state — populated by /api/admin/whoami on boot. Server validates
-// initData and only returns admin:true for allow-listed Telegram IDs, so
-// the UI flag is purely cosmetic; the price override is enforced server-
-// side regardless of what the client claims.
-let isAdmin = false;
-let adminTestPrices = true;   // default ON when admin so smoke testing is one tap away
-
-async function fetchAdminStatus() {
-  try {
-    const initData = getInitData();
-    if (!initData) return;
-    const r = await fetch('/api/admin/whoami', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ initData }),
-    });
-    const d = await r.json();
-    isAdmin = !!(d && d.admin);
-    // Show the toggle bar + re-render shop so the prices reflect mode.
-    refreshAdminUI();
-  } catch (e) {}
-}
-
-function refreshAdminUI() {
-  const bar = document.getElementById('admin-toggle-bar');
-  if (bar) bar.classList.toggle('show', isAdmin);
-  document.getElementById('admin-mode-test').classList.toggle('active', isAdmin && adminTestPrices);
-  document.getElementById('admin-mode-real').classList.toggle('active', isAdmin && !adminTestPrices);
-}
-
-document.getElementById('admin-mode-test').addEventListener('click', () => {
-  if (!isAdmin) return;
-  adminTestPrices = true; refreshAdminUI(); renderShop();
-});
-document.getElementById('admin-mode-real').addEventListener('click', () => {
-  if (!isAdmin) return;
-  adminTestPrices = false; refreshAdminUI(); renderShop();
-});
-
 function renderShop() {
-  if (typeof MX !== 'undefined' && MX.ready) MX.track('Shop Viewed', { admin_test_mode: isAdmin && adminTestPrices });
-  refreshAdminUI();
-  const useAdminPrice = isAdmin && adminTestPrices;
+  if (typeof MX !== 'undefined' && MX.ready) MX.track('Shop Viewed');
   const grid = document.getElementById('sku-grid');
   grid.innerHTML = '';
   for (const s of SKU_DISPLAY) {
     const card = document.createElement('div');
     card.className = 'sku-card' + (s.feature ? ' feature' : '');
-    const displayedPrice = useAdminPrice ? 1 : s.price;
-    const priceLabel = useAdminPrice
-      ? `1 <span class="star">⭐</span> <span style="opacity:0.75;font-size:10px">(was ${s.price})</span>`
-      : `${s.price} <span class="star">⭐</span>`;
     card.innerHTML = `
       <div class="sku-icon">${s.icon}</div>
       <div class="sku-title">${s.title_key}</div>
       <div class="sku-desc">${s.desc}</div>
-      <button class="sku-buy ${useAdminPrice ? 'admin-price' : ''}" data-sku="${s.id}">${priceLabel}</button>
+      <button class="sku-buy" data-sku="${s.id}">${s.price} <span class="star">⭐</span></button>
     `;
     grid.appendChild(card);
   }
@@ -3758,7 +3665,7 @@ async function buySku(sku) {
   try {
     const r = await fetch('/api/create-invoice', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sku, initData, admin_test_price: isAdmin && adminTestPrices }),
+      body: JSON.stringify({ sku, initData }),
     });
     const d = await r.json();
     if (!d.link) {
@@ -5235,9 +5142,6 @@ function openFtueIfFirst() {
   // Power Hour — fetch on boot + refresh every 5 min
   fetchPowerHour();
   setInterval(fetchPowerHour, 5 * 60 * 1000);
-  // Admin detection — show 1⭐ test-pricing toggle in Shop if the
-  // authenticated Telegram user is on the admin allow-list (server-validated).
-  fetchAdminStatus();
 })();
 
 </script>
