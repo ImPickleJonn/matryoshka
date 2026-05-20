@@ -68,7 +68,9 @@ function saveUsers() {
 // so a malicious client can't set fake state.
 const SYNC_FIELDS = [
   'gems', 'revives', 'previews', 'undos', 'shieldDays',
+  'hammers', 'shakes',
   'skins', 'activeSkin',
+  'lastSpinYMD', 'spinCount',
   'xp', 'highestTierSeen',
   'streak', 'lastPlayedYMD',
   'best',
@@ -389,6 +391,22 @@ const SKUS = {
     id: 'streak_shield', title: 'Streak Shield · 7 Days',
     description: 'Miss a day? Your streak survives. 7-day insurance.',
     price: 99, priceUsd: '$1.29', grant: { shieldDays: 7 },
+  },
+  hammer_pack: {
+    id: 'hammer_pack', title: 'Hammer · ×5',
+    description: 'Tap any doll in the jar to remove it. 5 hammers.',
+    price: 80, priceUsd: '$1.05', grant: { hammers: 5 },
+  },
+  shake_pack: {
+    id: 'shake_pack', title: 'Shake · ×5',
+    description: 'Jostle every doll in the jar to dislodge bad stacks.',
+    price: 60, priceUsd: '$0.79', grant: { shakes: 5 },
+  },
+  booster_bundle: {
+    id: 'booster_bundle', title: 'Booster Bundle · Best Value',
+    description: '5 hammers + 5 shakes + 5 undos + 2 revives.',
+    price: 250, priceUsd: '$3.29',
+    grant: { hammers: 5, shakes: 5, undos: 5, revives: 2 },
   },
   test_purchase: {
     id: 'test_purchase', title: 'Test Purchase (admin)',

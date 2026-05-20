@@ -195,72 +195,6 @@
   .next-pill canvas { display: block; }
 
   /* =========================================================
-     [05a] Booster HUD — vertical strip of action buttons on the
-     right side of the jar. Each shows the count remaining, taps
-     to activate (or fire immediately for Shake). Subtle pulse
-     when active.
-     ========================================================= */
-  .booster-rail {
-    position: absolute;
-    z-index: 22;
-    display: flex; flex-direction: column;
-    gap: 8px;
-  }
-  .booster-btn {
-    width: 44px; height: 44px;
-    border-radius: 14px;
-    background: linear-gradient(180deg, #fff 0%, #fce6c2 100%);
-    border: 1.5px solid #e7b53b;
-    box-shadow: 0 3px 6px rgba(118,72,28,0.18);
-    color: var(--ink);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 22px;
-    cursor: pointer;
-    position: relative;
-    transition: transform 0.12s ease;
-  }
-  .booster-btn:active { transform: scale(0.92); }
-  .booster-btn.disabled {
-    opacity: 0.55;
-    filter: grayscale(0.4);
-  }
-  .booster-btn .count {
-    position: absolute;
-    bottom: -3px; right: -3px;
-    background: var(--ink); color: #fff;
-    font-size: 10px; font-weight: 800;
-    border-radius: 999px;
-    min-width: 17px; height: 17px;
-    padding: 0 4px;
-    display: inline-flex; align-items: center; justify-content: center;
-    line-height: 1;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-  }
-  .booster-btn .count.zero { background: #c47b6a; }
-  .booster-btn.active {
-    background: linear-gradient(180deg, #fff5d2 0%, #ffd84d 100%);
-    border-color: var(--gold-deep);
-    box-shadow: 0 0 0 3px rgba(253,197,0,0.45), 0 3px 6px rgba(118,72,28,0.18);
-    animation: booster-pulse 0.9s ease-in-out infinite;
-  }
-  @keyframes booster-pulse {
-    0%, 100% { box-shadow: 0 0 0 3px rgba(253,197,0,0.45), 0 3px 6px rgba(118,72,28,0.18); }
-    50%      { box-shadow: 0 0 0 6px rgba(253,197,0,0.20), 0 3px 6px rgba(118,72,28,0.18); }
-  }
-  /* When a booster is in "tap a doll" mode, hint with a target reticle
-     cursor over the canvas. */
-  .booster-mode-active #game { cursor: crosshair; }
-  .booster-cancel-hint {
-    position: absolute;
-    z-index: 23;
-    background: rgba(0,0,0,0.78);
-    color: #fff; font-size: 11px; font-weight: 700;
-    padding: 4px 10px; border-radius: 999px;
-    pointer-events: none;
-    letter-spacing: 0.5px;
-  }
-
-  /* =========================================================
      [05b] Mascot — corner reactive doll
      ========================================================= */
   .mascot-wrap {
@@ -488,46 +422,6 @@
   @keyframes claim-pulse {
     0%, 100% { transform: scale(1); }
     50% { transform: scale(1.06); }
-  }
-
-  /* =========================================================
-     [09a] Wheel of Fortune (Earn tab)
-     ========================================================= */
-  .spin-stage {
-    position: relative;
-    display: flex; flex-direction: column;
-    align-items: center;
-    padding: 6px 0 8px;
-  }
-  .spin-pointer {
-    position: absolute; top: -2px; left: 50%;
-    transform: translateX(-50%);
-    color: var(--ink);
-    font-size: 22px; line-height: 1;
-    text-shadow: 0 2px 4px rgba(0,0,0,0.25);
-    z-index: 2;
-  }
-  #spin-canvas { display: block; max-width: 92%; height: auto; }
-  .spin-btn {
-    width: 100%;
-    margin-top: 8px;
-    background: linear-gradient(180deg, #4ad3ad 0%, #2a9d8f 100%);
-    color: #fff; font-weight: 800; border: none;
-    border-radius: 10px; padding: 12px 0;
-    font-size: 15px; cursor: pointer;
-    box-shadow: 0 2px 5px rgba(42,157,143,0.4);
-  }
-  .spin-btn:disabled {
-    background: #cdd5d7; cursor: not-allowed;
-    box-shadow: none;
-  }
-  .spin-btn:active:not(:disabled) { transform: translateY(1px); }
-  .spin-status {
-    font-size: 11px; font-weight: 700;
-    color: var(--ink-soft);
-    background: #fbf6ee; border-radius: 8px;
-    padding: 2px 7px; margin-left: auto;
-    border: 1px solid #ecd9a8;
   }
 
   /* =========================================================
@@ -955,13 +849,6 @@
         <div class="mascot-bubble" id="mascot-bubble"></div>
         <canvas id="mascot-canvas" width="68" height="80"></canvas>
       </div>
-      <div class="booster-rail" id="booster-rail">
-        <button class="booster-btn" id="btn-hammer" title="Hammer"
-                aria-label="Hammer — tap a doll to remove it">🔨<span class="count" id="hammer-count">0</span></button>
-        <button class="booster-btn" id="btn-shake" title="Shake"
-                aria-label="Shake — jostles all dolls">🌀<span class="count" id="shake-count">0</span></button>
-      </div>
-      <div class="booster-cancel-hint" id="booster-hint" style="display:none">Tap a doll · tap again to cancel</div>
     </div>
   </div>
 
@@ -989,15 +876,6 @@
       <div class="earn-section">
         <h3>🎯 <span data-i18n="missions">Missions</span></h3>
         <div id="mission-list"></div>
-      </div>
-
-      <div class="earn-section" id="spin-section">
-        <h3>🎡 <span data-i18n="spin_title">Wheel of Fortune</span> <span class="spin-status" id="spin-status"></span></h3>
-        <div class="spin-stage">
-          <div class="spin-pointer">▼</div>
-          <canvas id="spin-canvas" width="260" height="260"></canvas>
-        </div>
-        <button class="spin-btn" id="spin-btn" data-i18n="spin_go">Spin Free!</button>
       </div>
 
       <div class="earn-section" id="bp-section" style="display:none">
@@ -1275,10 +1153,6 @@ const STRINGS = {
     share_text: '🪆 I scored {score} on Matryoshka! Try and beat me 👉',
     tier_names: ['Seed','Baby','Top','Girl','Aunt','Mother','Grandma','Merchant','Lady','Princess','Tsarina'],
     how_to_play: 'How to Play',
-    spin_title: 'Wheel of Fortune',
-    spin_go: 'Spin Free!',
-    spin_ready: 'Free spin ready',
-    spins_total: 'lifetime spins',
     ftue_skip: 'SKIP', ftue_back: '← Back', ftue_next: 'Next →', ftue_lets_play: 'Let\'s Play!',
     ftue_pyramid_cap: '11 tiers · from seed to Tsarina',
     ftue_drop_tap: 'Release to drop',
@@ -1340,10 +1214,6 @@ const STRINGS = {
     share_text: '🪆 Мой счёт в Матрёшке — {score}! Сможешь больше? 👉',
     tier_names: ['Зёрнышко','Малыш','Юла','Девочка','Тётя','Мама','Бабушка','Купчиха','Барыня','Княгиня','Царица'],
     how_to_play: 'Как играть',
-    spin_title: 'Колесо Фортуны',
-    spin_go: 'Крутить!',
-    spin_ready: 'Бесплатный спин готов',
-    spins_total: 'всего вращений',
     ftue_skip: 'ПРОПУСТИТЬ', ftue_back: '← Назад', ftue_next: 'Далее →', ftue_lets_play: 'Поехали!',
     ftue_pyramid_cap: '11 уровней · от зёрнышка до Царицы',
     ftue_drop_tap: 'Отпусти, чтобы бросить',
@@ -1712,10 +1582,6 @@ const defaultState = () => ({
   undos: 2,
   previews: 0,
   shieldDays: 0,
-  hammers: 2,                // start every player with 2 freebies
-  shakes: 2,
-  lastSpinYMD: '',
-  spinCount: 0,
   best: 0,
   bestDaily: 0,
   bestTierEver: 0,
@@ -1917,20 +1783,12 @@ class Body {
     this.vy = 0;
     this.tier = tier;
     this.r = TIER_RADII[tier];
-    // Spin & rotation: subtle, controlled (v0.3.13). v0.3.2 zeroed it
-    // completely because uncontrolled spin felt chaotic. Now we bring a
-    // tiny bit back: small initial tilt, collisions impart a very small
-    // tangential spin (1/200th of original), strong damping each substep,
-    // active "restoration" torque each frame pulling angle back to 0, and
-    // a hard cap on max tilt. Result: dolls gently sway from impacts and
-    // settle into a slightly hand-placed look — never spinning, never
-    // upside down.
-    this.angle = (Math.random() - 0.5) * 0.06;
+    // Spin & rotation: zeroed in v0.3.2. Suika-style merge games keep dolls
+    // upright — letting them rotate freely felt chaotic ("spinning like
+    // crazy") and made the matryoshkas look ungrounded. Tiny random angle
+    // (±0.02 rad, ~1°) gives the stack a hand-placed look without movement.
+    this.angle = (Math.random() - 0.5) * 0.04;
     this.spin = 0;
-    // Facial-animation state (v0.3.13)
-    this.blinkUntil = 0;
-    this.surpriseUntil = 0;
-    this.nextBlinkAt = performance.now() + 1500 + Math.random() * 4000;
     this.merged = false;
     this.bornAt = performance.now();
     this.restingFrames = 0;
@@ -1999,14 +1857,7 @@ function physicsStep() {
       if (b.vx < -MAX_VEL) b.vx = -MAX_VEL;
       b.x += b.vx * substep;
       b.y += b.vy * substep;
-      // Subtle rotation (v0.3.13): integrate spin, damp aggressively,
-      // and apply a soft restoring torque pulling angle back to 0.
-      b.angle += b.spin * substep;
-      b.spin *= 0.94;
-      b.angle += -b.angle * 0.035 * substep;
-      // Hard cap so a freak impact can't flip a doll past ~12°.
-      if (b.angle > 0.20) b.angle = 0.20;
-      if (b.angle < -0.20) b.angle = -0.20;
+      // angle and spin intentionally not integrated (zeroed v0.3.2)
       if (b.scale < 1) b.scale = Math.min(1, b.scale + 0.06 * substep);
     }
     // Walls + floor — no spin imparted (zeroed v0.3.2)
@@ -2048,12 +1899,8 @@ function physicsStep() {
             const ix = j2 * nx, iy = j2 * ny;
             a.vx -= ix; a.vy -= iy;
             c.vx += ix; c.vy += iy;
-            // Tiny tangential spin transfer (v0.3.13) — adds a hint of
-            // life when dolls slide past each other. 1/200th of the v0.1
-            // value plus aggressive damping each step prevents runaway.
-            const tan = -ny * rvx + nx * rvy;
-            a.spin -= tan * 0.000025;
-            c.spin += tan * 0.000025;
+            // No spin transfer (zeroed v0.3.2) — kept dolls upright per Suika
+            // reference look.
           }
           // Merge check — same tier, last substep only (avoid double-merge)
           if (s === PHYS_SUBSTEPS - 1 && a.tier === c.tier && a.tier < TIER_COUNT - 1) {
@@ -2089,9 +1936,7 @@ function physicsStep() {
         nb.vx = mvx * 0.6;
         nb.vy = mvy * 0.6;
         nb.scale = 0.3;
-        // Briefly surprised face on the freshly-merged doll — wide eyes
-        // + open mouth + brighter cheeks for ~450ms.
-        nb.surpriseUntil = performance.now() + 450;
+        // No spin inheritance (zeroed v0.3.2)
         world.push(nb);
         // Combo tracking: chained merges within the window multiply score
         const now = performance.now();
@@ -2283,15 +2128,8 @@ function roundRect(c, x, y, w, h, r) {
   c.closePath();
 }
 
-// drawMatryoshka — body parameter optional. When passed, reads facial
-// state (blink, surprise) from the Body so dolls in the world get
-// expressive faces. Carrier preview, next-pill preview, FTUE demos,
-// and share-card render pass null and get the default happy face.
-function drawMatryoshka(c, x, y, r, tier, angle, scale, body) {
+function drawMatryoshka(c, x, y, r, tier, angle, scale) {
   const pal = getPalette(tier);
-  const now = performance.now();
-  const isBlinking = body && now < body.blinkUntil;
-  const isSurprised = body && now < body.surpriseUntil;
   c.save();
   c.translate(x, y);
   c.rotate(angle || 0);
@@ -2326,57 +2164,26 @@ function drawMatryoshka(c, x, y, r, tier, angle, scale, body) {
   c.ellipse(0, -r * 0.4, r * 0.36, r * 0.28, 0, 0, Math.PI * 2);
   c.fill();
 
-  // Eyes — facial-state aware (v0.3.13)
+  // Eyes
   c.fillStyle = pal.accent;
-  if (isBlinking) {
-    // Horizontal line eyes (blink)
-    c.strokeStyle = pal.accent;
-    c.lineWidth = Math.max(1, r * 0.04);
-    c.beginPath();
-    c.moveTo(-r * 0.17, -r * 0.40); c.lineTo(-r * 0.09, -r * 0.40);
-    c.moveTo( r * 0.09, -r * 0.40); c.lineTo( r * 0.17, -r * 0.40);
-    c.stroke();
-  } else if (isSurprised) {
-    // Wide round "wow" eyes
-    c.beginPath();
-    c.arc(-r * 0.13, -r * 0.40, r * 0.065, 0, Math.PI * 2);
-    c.arc( r * 0.13, -r * 0.40, r * 0.065, 0, Math.PI * 2);
-    c.fill();
-    // Little white highlight inside each eye for life
-    c.fillStyle = '#fff';
-    c.beginPath();
-    c.arc(-r * 0.11, -r * 0.42, r * 0.02, 0, Math.PI * 2);
-    c.arc( r * 0.15, -r * 0.42, r * 0.02, 0, Math.PI * 2);
-    c.fill();
-  } else {
-    // Default ellipse eyes
-    c.beginPath();
-    c.ellipse(-r * 0.13, -r * 0.4, r * 0.04, r * 0.06, 0, 0, Math.PI * 2);
-    c.ellipse(r * 0.13, -r * 0.4, r * 0.04, r * 0.06, 0, 0, Math.PI * 2);
-    c.fill();
-  }
+  c.beginPath();
+  c.ellipse(-r * 0.13, -r * 0.4, r * 0.04, r * 0.06, 0, 0, Math.PI * 2);
+  c.ellipse(r * 0.13, -r * 0.4, r * 0.04, r * 0.06, 0, 0, Math.PI * 2);
+  c.fill();
 
-  // Cheeks (more saturated when surprised — like a blush of joy)
-  const cheekAlpha = isSurprised ? 0.78 : 0.55;
-  c.fillStyle = 'rgba(231,57,57,' + cheekAlpha + ')';
+  // Cheeks
+  c.fillStyle = 'rgba(231,57,57,0.55)';
   c.beginPath();
   c.ellipse(-r * 0.20, -r * 0.32, r * 0.06, r * 0.05, 0, 0, Math.PI * 2);
   c.ellipse(r * 0.20, -r * 0.32, r * 0.06, r * 0.05, 0, 0, Math.PI * 2);
   c.fill();
 
-  // Mouth — open "wow" oval when surprised, smile arc otherwise
-  if (isSurprised) {
-    c.fillStyle = pal.accent;
-    c.beginPath();
-    c.ellipse(0, -r * 0.27, r * 0.045, r * 0.06, 0, 0, Math.PI * 2);
-    c.fill();
-  } else {
-    c.strokeStyle = pal.accent;
-    c.lineWidth = Math.max(1, r * 0.025);
-    c.beginPath();
-    c.arc(0, -r * 0.30, r * 0.08, 0.1 * Math.PI, 0.9 * Math.PI);
-    c.stroke();
-  }
+  // Mouth
+  c.strokeStyle = pal.accent;
+  c.lineWidth = Math.max(1, r * 0.025);
+  c.beginPath();
+  c.arc(0, -r * 0.30, r * 0.08, 0.1 * Math.PI, 0.9 * Math.PI);
+  c.stroke();
 
   // Apron floral motif (size-dependent: only on T3+)
   if (tier >= 2) {
@@ -2482,21 +2289,6 @@ function drawParticles() {
 
 // Floating score popups
 const floats = [];
-// stepFaces — drives the blink cycle for every doll in the world.
-// Each Body has a `nextBlinkAt` timer; when it elapses we set a short
-// blink window and schedule the next blink in 1.8–5.5s. Cheap to run
-// over the whole world every frame.
-function stepFaces() {
-  const now = performance.now();
-  for (const b of world) {
-    if (b.merged) continue;
-    if (now > b.nextBlinkAt) {
-      b.blinkUntil = now + 110;          // ~6 frames at 60fps
-      b.nextBlinkAt = now + 1800 + Math.random() * 3700;
-    }
-  }
-}
-
 function spawnFloatScore(x, y, text) {
   // Clamp x to stay clearly inside the jar so the popup text never bleeds
   // out the side when merges happen near the walls. The text is roughly
@@ -2571,7 +2363,7 @@ function render() {
   // Sort by tier so larger draw on top (more satisfying)
   const drawList = world.slice().sort((a, b) => a.tier - b.tier);
   for (const b of drawList) {
-    drawMatryoshka(ctx, b.x, b.y, b.r, b.tier, b.angle, b.scale, b);
+    drawMatryoshka(ctx, b.x, b.y, b.r, b.tier, b.angle, b.scale);
   }
 
   // Carrier doll preview at top
@@ -2605,7 +2397,6 @@ function gameTick() {
     stepFloats();
     stepComboFlashes();
     stepMascot();
-    stepFaces();
     // Combo timeout — reset count if window expired
     if (comboCount > 0 && (performance.now() - lastMergeAtMs) > COMBO_WINDOW_MS) {
       comboCount = 0;
@@ -2647,11 +2438,7 @@ function onPointer(e) {
   lastDropX = carrier.x;
 }
 function onPointerDown(e) {
-  if (!running) return;
-  // Hammer-mode hijacks pointerdown — if a booster is active, the tap
-  // removes a doll instead of moving the carrier.
-  if (handleHammerHit(e)) return;
-  if (!carrier) return;
+  if (!running || !carrier) return;
   if (performance.now() < carrierLockedUntil) return;
   pointerDown = true;
   onPointer(e);
@@ -2745,116 +2532,6 @@ document.getElementById('btn-undo').addEventListener('click', doUndo);
 document.querySelectorAll('.mode-pill').forEach(p => {
   p.addEventListener('click', () => setMode(p.getAttribute('data-mode')));
 });
-
-/* =========================================================
-   [JS-08c] Boosters — Hammer + Shake
-   =========================================================
-   Hammer: enters "tap a doll" mode. Next canvas click hit-tests against
-   every body in the world and removes the topmost match (with explosion
-   FX), decrementing state.hammers. Tap an empty area, or tap the Hammer
-   button again, to cancel without spending a charge.
-   Shake: fires immediately. Applies a random horizontal impulse to every
-   body so the stack reshuffles, decrementing state.shakes.
-*/
-let activeBooster = null;            // 'hammer' | null
-const hammerBtn = document.getElementById('btn-hammer');
-const shakeBtn  = document.getElementById('btn-shake');
-const boosterHint = document.getElementById('booster-hint');
-
-function refreshBoosterHUD() {
-  const hc = document.getElementById('hammer-count');
-  const sc = document.getElementById('shake-count');
-  const hams = state.hammers || 0;
-  const shks = state.shakes  || 0;
-  hc.textContent = hams; sc.textContent = shks;
-  hc.classList.toggle('zero', hams <= 0);
-  sc.classList.toggle('zero', shks <= 0);
-  hammerBtn.classList.toggle('disabled', hams <= 0);
-  shakeBtn.classList.toggle('disabled',  shks <= 0);
-  hammerBtn.classList.toggle('active', activeBooster === 'hammer');
-  document.body.classList.toggle('booster-mode-active', activeBooster !== null);
-  boosterHint.style.display = activeBooster === 'hammer' ? '' : 'none';
-}
-
-function setActiveBooster(name) {
-  activeBooster = name;
-  refreshBoosterHUD();
-}
-
-hammerBtn.addEventListener('click', () => {
-  if ((state.hammers || 0) <= 0) {
-    toast('No hammers — buy in Shop');
-    return;
-  }
-  if (!running) return;
-  setActiveBooster(activeBooster === 'hammer' ? null : 'hammer');
-  tgHaptic('select');
-});
-
-shakeBtn.addEventListener('click', () => {
-  if ((state.shakes || 0) <= 0) {
-    toast('No shakes — buy in Shop');
-    return;
-  }
-  if (!running) return;
-  state.shakes--;
-  doShake();
-  save(); refreshBoosterHUD();
-  tgHaptic('medium');
-});
-
-function doShake() {
-  // Apply a random horizontal kick + small upward bump to every body,
-  // plus jitter so stacks unfuse and resettle. Screen-shake for feel.
-  for (const b of world) {
-    if (b.merged) continue;
-    b.vx += (Math.random() - 0.5) * 9;
-    b.vy -= 1.5 + Math.random() * 3;
-    b.spin += (Math.random() - 0.5) * 0.08;
-  }
-  kickShake(16);
-  // Reset every doll's death-line countdown — shake gives you breathing
-  // room (recovery without immediate game-over).
-  for (const b of world) b.restingFrames = 0;
-  // Audio cue
-  tone(110, 0.18, 'sawtooth', 0.12);
-  setTimeout(() => tone(220, 0.10, 'triangle', 0.10), 80);
-}
-
-// Hammer mode hits — intercept canvas pointerdown when active.
-function handleHammerHit(e) {
-  if (activeBooster !== 'hammer') return false;
-  const rect = canvas.getBoundingClientRect();
-  const px = (e.clientX - rect.left) * (360 / rect.width);
-  const py = (e.clientY - rect.top)  * (540 / rect.height);
-  // Find topmost body whose disk contains the tap point. Iterate in
-  // reverse render order so the visually-on-top doll wins.
-  const sorted = world.slice().sort((a, b) => b.tier - a.tier);
-  for (const b of sorted) {
-    if (b.merged) continue;
-    const dx = px - b.x, dy = py - b.y;
-    if (dx * dx + dy * dy <= b.r * b.r) {
-      // Boom.
-      spawnParticles(b.x, b.y, 18 + b.tier * 3, getPalette(b.tier).body, 1.3);
-      spawnParticles(b.x, b.y, 8, '#fdc500', 1.5);
-      b.merged = true;
-      kickShake(6);
-      tone(330, 0.10, 'triangle', 0.12);
-      setTimeout(() => tone(165, 0.18, 'sawtooth', 0.10), 60);
-      state.hammers = Math.max(0, (state.hammers || 0) - 1);
-      setActiveBooster(null);
-      save();
-      // Sweep the merged bodies out
-      for (let i = world.length - 1; i >= 0; i--) if (world[i].merged) world.splice(i, 1);
-      tgHaptic('medium');
-      return true;
-    }
-  }
-  // Missed — cancel hammer mode without charging.
-  setActiveBooster(null);
-  toast('Cancelled');
-  return true;
-}
 
 // Prevent default touch behavior on the canvas
 canvas.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
@@ -3146,7 +2823,6 @@ function newGame() {
    [JS-11] HUD + tier dots
    ========================================================= */
 function hudUpdate() {
-  refreshBoosterHUD();
   const gemsEl = document.getElementById('gems-count');
   const prevGems = parseInt(gemsEl.textContent, 10) || 0;
   const newGems = state.gems || 0;
@@ -3214,7 +2890,6 @@ function switchTab(name) {
   if (name === 'shop') renderShop();
   if (name === 'earn') {
     renderBattlePassBanner();
-    renderSpinSection();
     fetchTournament();
     renderChest();
     renderMilestones();
@@ -3241,12 +2916,6 @@ const SKU_DISPLAY = [
     title_key: 'Next-Doll Previews ×10', desc: 'See 2 dolls ahead for 10 drops' },
   { id: 'undo_pack',     icon: '↩️', price: 60,
     title_key: 'Undo Pack ×5', desc: 'Take back your last drop, 5 times' },
-  { id: 'hammer_pack',   icon: '🔨', price: 80,
-    title_key: 'Hammer ×5', desc: 'Tap any doll to remove it instantly' },
-  { id: 'shake_pack',    icon: '🌀', price: 60,
-    title_key: 'Shake ×5', desc: 'Jostle the jar to dislodge stuck stacks' },
-  { id: 'booster_bundle',icon: '🎒', price: 250, feature: true,
-    title_key: 'Booster Bundle', desc: '5 hammers + 5 shakes + 5 undos + 2 revives' },
   { id: 'gems_small',    icon: '💎', price: 99,
     title_key: '500 Gems', desc: 'Small pile of gems' },
   { id: 'gems_big',      icon: '💰', price: 399,
@@ -3329,8 +2998,6 @@ function applyGrant(g) {
   if (g.revives)  state.revives  = (state.revives  || 0) + g.revives;
   if (g.previews) state.previews = (state.previews || 0) + g.previews;
   if (g.undos)    state.undos    = (state.undos    || 0) + g.undos;
-  if (g.hammers)  state.hammers  = (state.hammers  || 0) + g.hammers;
-  if (g.shakes)   state.shakes   = (state.shakes   || 0) + g.shakes;
   if (g.shieldDays) state.shieldDays = (state.shieldDays || 0) + g.shieldDays;
   if (g.skins) { state.skins = Array.from(new Set([...(state.skins || []), ...g.skins])); }
   if (g.battlePass) state.battlePassUntil = Date.now() + g.battlePass * 86400000;
@@ -3493,173 +3160,6 @@ function doClaimMission(m) {
   playClaimSound();
   tgHaptic('success');
 }
-
-/* =========================================================
-   [JS-14a] Wheel of Fortune — daily free spin
-   ========================================================= */
-// 12 weighted segments. Probability proportional to `w`. Sum = 100.
-// Tuned to make most spins feel rewarding (gems) with rare booster wins.
-const SPIN_PRIZES = [
-  { kind: 'gems',    n: 25,   w: 22, label: '25 💎',  color: '#ffd166' },
-  { kind: 'gems',    n: 50,   w: 18, label: '50 💎',  color: '#f4a261' },
-  { kind: 'gems',    n: 100,  w: 10, label: '100 💎', color: '#e76f51' },
-  { kind: 'gems',    n: 200,  w: 4,  label: '200 💎', color: '#f72585' },
-  { kind: 'gems',    n: 500,  w: 1,  label: '500 💎', color: '#fdc500' },
-  { kind: 'hammer',  n: 1,    w: 11, label: '🔨 ×1', color: '#9b5de5' },
-  { kind: 'hammer',  n: 3,    w: 4,  label: '🔨 ×3', color: '#6c2eb5' },
-  { kind: 'shake',   n: 1,    w: 11, label: '🌀 ×1', color: '#2a9d8f' },
-  { kind: 'shake',   n: 3,    w: 4,  label: '🌀 ×3', color: '#176d62' },
-  { kind: 'undo',    n: 2,    w: 8,  label: '↩️ ×2', color: '#457b9d' },
-  { kind: 'revive',  n: 1,    w: 5,  label: '🟢 +Revive', color: '#39ff14' },
-  { kind: 'jackpot', n: 1,    w: 2,  label: '🏆 Jackpot', color: '#fff' },
-];
-
-let spinAngle = 0;          // current rotation in radians
-let spinTargetAngle = 0;    // animation target
-let spinAnimating = false;
-
-function canSpinToday() {
-  return state.lastSpinYMD !== ymd();
-}
-
-function renderSpinWheel(highlightIdx) {
-  const cvs = document.getElementById('spin-canvas');
-  if (!cvs) return;
-  const c = ensureHiDPI(cvs, 260, 260);
-  const W = 260, H = 260, cx = W / 2, cy = H / 2;
-  const r = Math.min(W, H) * 0.46;
-  c.clearRect(0, 0, W, H);
-  const n = SPIN_PRIZES.length;
-  const arc = (Math.PI * 2) / n;
-  c.save();
-  c.translate(cx, cy);
-  c.rotate(spinAngle);
-  for (let i = 0; i < n; i++) {
-    const p = SPIN_PRIZES[i];
-    const a0 = i * arc - Math.PI / 2 - arc / 2;
-    const a1 = a0 + arc;
-    c.beginPath();
-    c.moveTo(0, 0);
-    c.arc(0, 0, r, a0, a1);
-    c.closePath();
-    c.fillStyle = p.color;
-    c.fill();
-    if (highlightIdx === i) {
-      c.fillStyle = 'rgba(255,255,255,0.45)';
-      c.fill();
-    }
-    c.strokeStyle = 'rgba(0,0,0,0.18)';
-    c.lineWidth = 2;
-    c.stroke();
-    // Label radial
-    c.save();
-    c.rotate(a0 + arc / 2);
-    c.fillStyle = '#2b0a10';
-    c.font = 'bold 11px -apple-system, system-ui, sans-serif';
-    c.textAlign = 'right';
-    c.textBaseline = 'middle';
-    c.fillText(p.label, r - 8, 0);
-    c.restore();
-  }
-  // Center hub
-  c.fillStyle = '#fff';
-  c.beginPath(); c.arc(0, 0, r * 0.22, 0, Math.PI * 2); c.fill();
-  c.strokeStyle = '#b88317'; c.lineWidth = 3; c.stroke();
-  c.fillStyle = '#a51d30';
-  c.font = 'bold 22px sans-serif';
-  c.textAlign = 'center'; c.textBaseline = 'middle';
-  c.fillText('🪆', 0, 1);
-  // Outer rim
-  c.beginPath(); c.arc(0, 0, r + 4, 0, Math.PI * 2);
-  c.strokeStyle = '#b88317'; c.lineWidth = 6; c.stroke();
-  c.restore();
-}
-
-function pickWeightedPrize() {
-  const total = SPIN_PRIZES.reduce((s, p) => s + p.w, 0);
-  let r = Math.random() * total;
-  for (let i = 0; i < SPIN_PRIZES.length; i++) {
-    r -= SPIN_PRIZES[i].w;
-    if (r < 0) return i;
-  }
-  return 0;
-}
-
-function doSpin() {
-  if (spinAnimating) return;
-  if (!canSpinToday()) { toast('Come back tomorrow!'); return; }
-  state.lastSpinYMD = ymd();
-  state.spinCount = (state.spinCount || 0) + 1;
-  save(); renderSpinSection();
-  const idx = pickWeightedPrize();
-  const arc = (Math.PI * 2) / SPIN_PRIZES.length;
-  // Target: rotate so segment idx lands under the top pointer.
-  // Pointer is at angle -PI/2 (top). Segment i is centered at i*arc - PI/2.
-  // We want segment center to align with the pointer angle.
-  const segmentCenter = idx * arc;
-  const fullSpins = 5 + Math.floor(Math.random() * 3);
-  spinTargetAngle = spinAngle + fullSpins * Math.PI * 2 - segmentCenter;
-  spinAnimating = true;
-  const startAngle = spinAngle;
-  const totalDelta = spinTargetAngle - startAngle;
-  const startMs = performance.now();
-  const durMs = 3600;
-  function animate() {
-    const t = Math.min(1, (performance.now() - startMs) / durMs);
-    // Ease-out cubic
-    const eased = 1 - Math.pow(1 - t, 3);
-    spinAngle = startAngle + totalDelta * eased;
-    renderSpinWheel();
-    if (t < 1) {
-      requestAnimationFrame(animate);
-    } else {
-      spinAnimating = false;
-      // Settle on exact angle to avoid float drift
-      spinAngle = spinTargetAngle % (Math.PI * 2);
-      renderSpinWheel(idx);
-      applySpinPrize(SPIN_PRIZES[idx]);
-    }
-  }
-  requestAnimationFrame(animate);
-  tone(440, 0.08, 'triangle', 0.10);
-}
-
-function applySpinPrize(p) {
-  // Jackpot rolls another big-gems-or-special prize for the dramatic
-  // "what did I win" moment. Skip in v1: just grant 500 gems + a revive.
-  let grant = {};
-  if (p.kind === 'gems')    grant.gems = p.n;
-  if (p.kind === 'hammer')  grant.hammers = p.n;
-  if (p.kind === 'shake')   grant.shakes = p.n;
-  if (p.kind === 'undo')    grant.undos = p.n;
-  if (p.kind === 'revive')  grant.revives = p.n;
-  if (p.kind === 'jackpot') grant = { gems: 500, revives: 1, hammers: 2 };
-  applyGrant(grant);
-  save(); hudUpdate(); renderSpinSection();
-  setTimeout(() => {
-    toast('🎉 ' + p.label + (p.kind === 'jackpot' ? ' — 500💎 + revive + 2🔨!' : ''));
-    playClaimSound();
-    tgHaptic('success');
-  }, 200);
-}
-
-function renderSpinSection() {
-  renderSpinWheel();
-  const btn = document.getElementById('spin-btn');
-  const status = document.getElementById('spin-status');
-  if (!btn) return;
-  if (canSpinToday()) {
-    btn.disabled = false;
-    btn.textContent = '🎡 ' + t('spin_go');
-    if (status) status.textContent = '· ' + t('spin_ready');
-  } else {
-    btn.disabled = true;
-    btn.textContent = '✓ ' + t('come_back');
-    if (status) status.textContent = '· ' + (t('spins_total') || 'spins') + ': ' + (state.spinCount || 0);
-  }
-}
-
-document.getElementById('spin-btn').addEventListener('click', doSpin);
 
 /* =========================================================
    [JS-14b] Achievements
@@ -4240,19 +3740,6 @@ function fitCanvas() {
     // Bubble: anchor above mascot
     mascotBubble.style.left = '46px';
     mascotBubble.style.bottom = '78px';
-  }
-  // Booster rail: right edge of the jar, vertically centered.
-  const rail = document.getElementById('booster-rail');
-  if (rail) {
-    rail.style.right = (rect.right - canvasRect.right + 4) + 'px';
-    rail.style.top = (canvasRect.top - rect.top + (canvasRect.height - rail.offsetHeight) / 2) + 'px';
-  }
-  // Cancel hint: just above the booster rail
-  const hint = document.getElementById('booster-hint');
-  if (hint) {
-    hint.style.top = (canvasRect.top - rect.top + 8) + 'px';
-    hint.style.left = '50%';
-    hint.style.transform = 'translateX(-50%)';
   }
 }
 window.addEventListener('resize', () => { fitCanvas(); applySafeArea(); });
