@@ -1461,11 +1461,7 @@ const STRINGS = {
     // Includes the @bot mention so recipients see a clickable Telegram link
     // to the game right inside the message body. The attached URL still
     // renders an image preview + dedicated landing page with a PLAY button.
-    // The URL appended by Telegram's t.me/share/url dialog already points
-    // at the bot, so we drop the @mention to avoid the double-bot-reference
-    // the player flagged. Final message reads:
-    //   🪆 I scored 10079 on Matryoshka! 🎮 Beat me → https://t.me/MatryoshkaGameBot/app
-    share_text: '🪆 I scored {score} on Matryoshka! 🎮 Beat me →',
+    share_text: '🪆 I scored {score} on Matryoshka! 🎮 Beat me → @MatryoshkaGameBot',
     tier_names: ['Seed','Baby','Top','Girl','Aunt','Mother','Grandma','Merchant','Lady','Princess','Tsarina'],
     how_to_play: 'How to Play',
     spin_title: 'Wheel of Fortune',
@@ -1531,7 +1527,7 @@ const STRINGS = {
     undo_used: 'Отмена!', no_undo: 'Нечего отменять', no_undos_left: 'Закончились отмены',
     revive_used: 'Возрождение!',
     no_revives: 'Нет возрождений',
-    share_text: '🪆 Мой счёт в Матрёшке — {score}! 🎮 Победи меня →',
+    share_text: '🪆 Мой счёт в Матрёшке — {score}! 🎮 Победи меня → @MatryoshkaGameBot',
     tier_names: ['Зёрнышко','Малыш','Юла','Девочка','Тётя','Мама','Бабушка','Купчиха','Барыня','Княгиня','Царица'],
     how_to_play: 'Как играть',
     spin_title: 'Колесо Фортуны',
@@ -4630,11 +4626,7 @@ async function generateShareCard(finalScore, bestTier) {
   cc.font = 'bold 22px -apple-system, system-ui, sans-serif';
   cc.fillStyle = 'rgba(255,255,255,0.75)';
   cc.fillText('Can you beat me?', 400, 762);
-  // JPEG (not PNG) — Telegram's InlineQueryResultPhoto API requires JPEG.
-  // 0.92 quality is high-fidelity (~50-80KB for 800×800) and well under
-  // Telegram's 5MB cap. Was the silent-fail bug that made shares show no
-  // image: savePreparedInlineMessage was rejecting our PNG upload.
-  return c.toDataURL('image/jpeg', 0.92);
+  return c.toDataURL('image/png');
 }
 
 async function shareScore() {

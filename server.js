@@ -301,15 +301,22 @@ const SHARES_DIR = path.join(DATA_DIR, 'shares');
 try { if (!fs.existsSync(SHARES_DIR)) fs.mkdirSync(SHARES_DIR, { recursive: true }); } catch (e) {}
 app.use('/shares', express.static(SHARES_DIR, {
   maxAge: '7d',
-  setHeaders: (res) => { res.setHeader('Content-Type', 'image/png'); },
+  // Pick Content-Type from the actual file extension instead of hard-
+  // coding image/png. Telegram fetches the URL and validates the MIME
+  // type — sending image/png for a .jpg file (or vice versa) causes
+  // the prepared-message API to silently reject the upload.
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.jpg') || filePath.endsWith('.jpeg')) res.setHeader('Content-Type', 'image/jpeg');
+    else if (filePath.endsWith('.png')) res.setHeader('Content-Type', 'image/png');
+  },
 }));
 setInterval(() => {
   try {
     const now = Date.now();
     const TTL = 48 * 60 * 60 * 1000;
     for (const f of fs.readdirSync(SHARES_DIR)) {
-      // GC both the PNG and the sidecar JSON together once they pass TTL
-      if (!f.endsWith('.png') && !f.endsWith('.json')) continue;
+      // GC PNG, JPG, and sidecar JSON together once they pass TTL
+      if (!f.endsWith('.png') && !f.endsWith('.jpg') && !f.endsWith('.json')) continue;
       const p = path.join(SHARES_DIR, f);
       const st = fs.statSync(p);
       if (now - st.mtimeMs > TTL) fs.unlinkSync(p);
@@ -711,28 +718,32 @@ app.post('/api/share/upload', (req, res) => {
   const { initData, dataUrl, score } = req.body || {};
   const user = validateInitData(initData || '');
   if (!user) return res.status(401).json({ error: 'unauthenticated' });
-  if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/png;base64,')) {
-    return res.status(400).json({ error: 'expected dataUrl image/png' });
-  }
-  const b64 = dataUrl.slice('data:image/png;base64,'.length);
+  if (typeof dataUrl !== 'string') return res.status(400).json({ error: 'expected dataUrl' });
+  // Accept either JPEG (preferred for Telegram InlineQueryResultPhoto) or
+  // PNG (back-compat). Telegram's prepared-message API requires JPEG, so
+  // the client sends JPEG since v0.3.23 and we save with the .jpg ext.
+  let ext, prefix;
+  if (dataUrl.startsWith('data:image/jpeg;base64,'))      { ext = 'jpg'; prefix = 'data:image/jpeg;base64,'; }
+  else if (dataUrl.startsWith('data:image/jpg;base64,'))  { ext = 'jpg'; prefix = 'data:image/jpg;base64,'; }
+  else if (dataUrl.startsWith('data:image/png;base64,'))  { ext = 'png'; prefix = 'data:image/png;base64,'; }
+  else return res.status(400).json({ error: 'expected dataUrl image/jpeg or image/png' });
+  const b64 = dataUrl.slice(prefix.length);
   if (b64.length > 1024 * 1024) return res.status(413).json({ error: 'too large' });
   const id = crypto.randomBytes(8).toString('hex');
-  const filename = id + '.png';
+  const filename = id + '.' + ext;
   try { fs.writeFileSync(path.join(SHARES_DIR, filename), Buffer.from(b64, 'base64')); }
   catch (e) { return res.status(500).json({ error: 'write failed' }); }
-  // Persist score next to image so the share page can read it back.
+  // Persist score + ext next to image so the share page can read it back.
   if (typeof score === 'number' && score > 0) {
     try {
       fs.writeFileSync(path.join(SHARES_DIR, id + '.json'),
-        JSON.stringify({ score: Math.min(99999999, score), uid: user.id, name: user.first_name || user.username || 'Player', ts: Date.now() }));
+        JSON.stringify({ score: Math.min(99999999, score), uid: user.id, name: user.first_name || user.username || 'Player', ts: Date.now(), ext }));
     } catch (e) {}
   }
   const baseUrl = getPublicUrl();
   const imageUrl = (baseUrl ? baseUrl : '') + '/shares/' + filename;
   const shareUrl = (baseUrl ? baseUrl : '') + '/share/' + id;
-  // Backwards compat: keep `url` pointing at the image so older clients still
-  // work; new clients should prefer `shareUrl` (the HTML wrapper page).
-  res.json({ url: imageUrl, shareUrl, id });
+  res.json({ url: imageUrl, shareUrl, id, ext });
 });
 
 // Share landing page — what recipients of a "🪆 I scored X on Matryoshka,
@@ -747,10 +758,14 @@ function escHtml(s) {
 app.get('/share/:id', (req, res) => {
   const id = String(req.params.id || '');
   if (!/^[a-f0-9]{16}$/.test(id)) return res.status(404).send('Not found');
-  const imgPath = path.join(SHARES_DIR, id + '.png');
-  if (!fs.existsSync(imgPath)) return res.status(404).send('Expired or not found');
+  // Try .jpg first (new format since v0.3.23), then .png for older shares
+  // that haven't TTL-expired yet.
+  let ext = null;
+  if (fs.existsSync(path.join(SHARES_DIR, id + '.jpg'))) ext = 'jpg';
+  else if (fs.existsSync(path.join(SHARES_DIR, id + '.png'))) ext = 'png';
+  if (!ext) return res.status(404).send('Expired or not found');
   const baseUrl = getPublicUrl() || '';
-  const imageUrl = baseUrl + '/shares/' + id + '.png';
+  const imageUrl = baseUrl + '/shares/' + id + '.' + ext;
   // Pull the player's score + name if we have a sidecar JSON for this id.
   let score = 0, name = 'A player';
   try {
