@@ -4632,54 +4632,31 @@ async function generateShareCard(finalScore, bestTier) {
 async function shareScore() {
   const finalScore = score || state.best || 0;
   if (typeof MX !== 'undefined' && MX.ready) MX.track('Share Tapped', { score: finalScore });
+  const text = t('share_text').replace('{score}', finalScore);
+  // v0.3.14: the shared URL now points at a wrapper HTML page
+  // (/share/<id>) that renders the score card as og:image AND ships a
+  // big "🎮 PLAY MATRYOSHKA" button linking to the bot. Previously we
+  // shared the bare .png URL — friends could see the score but had
+  // no clear way to launch the game.
+  let shareUrl = window.location.href;
   const initData = getInitData();
-  // v0.3.22 — preferred path: Telegram's prepared-inline-message API.
-  // Result is a PHOTO + caption + inline "🎮 PLAY MATRYOSHKA" button
-  // (links to t.me/MatryoshkaGameBot/app). The recipient sees ONLY the
-  // image + button — no visible URL text in the message body, which
-  // was the player feedback ("can we have just the image of the
-  // user score? or does it have to include the link to the image
-  // source?"). Falls back to t.me/share/url if shareMessage isn't
-  // available (Bot API < 8.0 clients).
-  if (initData && tg && typeof tg.shareMessage === 'function') {
+  if (initData) {
     try {
       const dataUrl = await generateShareCard(finalScore, state.bestTierEver || 0);
-      const upRes = await fetch('/api/share/upload', {
+      const r = await fetch('/api/share/upload', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ initData, dataUrl, score: finalScore }),
       });
-      const up = await upRes.json();
-      if (up && up.url) {
-        const prepRes = await fetch('/api/share/prepare-message', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ initData, photoUrl: up.url, score: finalScore }),
-        });
-        const prep = await prepRes.json();
-        if (prep && prep.prepared_message_id) {
-          tg.shareMessage(prep.prepared_message_id, (success) => {
-            if (typeof MX !== 'undefined' && MX.ready) {
-              MX.track('Share Sent', { method: 'prepared', success: !!success, score: finalScore });
-            }
-          });
-          return;
-        }
-        if (typeof MX !== 'undefined' && MX.ready) {
-          MX.track('Share Prepare Failed', { error: prep && prep.error });
-        }
-      }
-    } catch (e) {
-      if (typeof MX !== 'undefined' && MX.ready) MX.track('Share Prepare Error', { msg: String(e) });
-    }
+      const d = await r.json();
+      // Prefer the wrapper page URL; fall back to the bare image URL
+      // if the server is on an older version that doesn't return one.
+      if (d && d.shareUrl) shareUrl = d.shareUrl;
+      else if (d && d.url) shareUrl = d.url;
+    } catch (e) {}
   }
-  // Fallback path — t.me/share/url with the play link as the URL.
-  // The URL will be visible in the message body, but at least it's the
-  // proper play deep link (not the share-page Render URL).
-  const text = t('share_text').replace('{score}', finalScore);
-  const playUrl = 'https://t.me/MatryoshkaGameBot/app';
-  const tgShare = 'https://t.me/share/url?url=' + encodeURIComponent(playUrl) + '&text=' + encodeURIComponent(text);
+  const tgShare = 'https://t.me/share/url?url=' + encodeURIComponent(shareUrl) + '&text=' + encodeURIComponent(text);
   if (tg && tg.openTelegramLink) tg.openTelegramLink(tgShare);
   else window.open(tgShare, '_blank');
-  if (typeof MX !== 'undefined' && MX.ready) MX.track('Share Sent', { method: 'fallback', score: finalScore });
 }
 
 const ALL_SKINS = [

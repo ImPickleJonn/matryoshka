@@ -649,6 +649,64 @@ app.post('/api/score/submit', (req, res) => {
   res.json({ ok: true, rank: myRank || null, tournament_rank: tRank || null, top: board.slice(0, 100) });
 });
 
+// Prepare an inline message (Bot API 8.0+ savePreparedInlineMessage) that
+// the Mini App can hand to Telegram.WebApp.shareMessage(). The resulting
+// share is a PHOTO with caption + an inline "PLAY MATRYOSHKA" button that
+// deep-links into the Mini App. Crucially, the message body shows ONLY
+// the photo + caption + button — no visible URL text — which is exactly
+// what the player asked for.
+app.post('/api/share/prepare-message', async (req, res) => {
+  if (!BOT_TOKEN) return res.status(500).json({ error: 'BOT_TOKEN not set' });
+  const { initData, photoUrl, score } = req.body || {};
+  const user = validateInitData(initData || '');
+  if (!user) return res.status(401).json({ error: 'unauthenticated' });
+  if (!photoUrl || typeof photoUrl !== 'string') return res.status(400).json({ error: 'photoUrl required' });
+  const displayName = (user.first_name || user.username || 'A player').slice(0, 32);
+  const sc = (typeof score === 'number' && score > 0) ? score : 0;
+  const playUrl = BOT_USERNAME
+    ? 'https://t.me/' + BOT_USERNAME + '/app'
+    : (getPublicUrl() || '');
+  const caption = sc > 0
+    ? '🪆 ' + displayName + ' scored ' + sc + ' on Matryoshka! 🎮 Beat them →'
+    : '🪆 Matryoshka — drop, merge, reign. Try it →';
+  const result = {
+    type: 'photo',
+    id: 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+    photo_url: photoUrl,
+    thumbnail_url: photoUrl,
+    photo_width: 800,
+    photo_height: 800,
+    caption,
+    reply_markup: {
+      inline_keyboard: [[{ text: '🎮 PLAY MATRYOSHKA', url: playUrl }]],
+    },
+  };
+  try {
+    const r = await fetch(`${TELEGRAM_API}/savePreparedInlineMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: user.id,
+        result,
+        allow_user_chats: true,
+        allow_bot_chats: true,
+        allow_group_chats: true,
+        allow_channel_chats: true,
+      }),
+    });
+    const d = await r.json();
+    if (!d.ok) {
+      return res.status(500).json({ error: d.description || 'telegram savePreparedInlineMessage failed', api: d });
+    }
+    res.json({
+      prepared_message_id: d.result.id,
+      expiration_date: d.result.expiration_date,
+    });
+  } catch (e) {
+    res.status(500).json({ error: String(e && e.message || e) });
+  }
+});
+
 app.post('/api/share/upload', (req, res) => {
   const { initData, dataUrl, score } = req.body || {};
   const user = validateInitData(initData || '');
