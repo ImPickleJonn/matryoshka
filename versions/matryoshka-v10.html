@@ -596,20 +596,19 @@
   }
 
   /* =========================================================
-     [11ab] Power Hour banner — sits inside .topbar's flex layout
-     between the left pills and the right gears so it never
-     overlaps the streak pill.
+     [11ab] Power Hour banner
      ========================================================= */
   .ph-banner {
+    position: absolute; top: calc(var(--tg-safe-top) + 6px);
+    left: 50%; transform: translateX(-50%);
     display: none;
     background: linear-gradient(90deg, #f72585 0%, #ff8c00 100%);
     color: #fff; font-weight: 800;
     border-radius: 999px;
-    padding: 5px 10px;
+    padding: 5px 12px;
     font-size: 11px; letter-spacing: 0.5px;
     box-shadow: 0 3px 8px rgba(247,37,133,0.4);
-    max-width: 180px;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    z-index: 28;
     animation: ph-pulse 1.6s ease-in-out infinite;
   }
   .ph-banner.show { display: inline-flex; align-items: center; gap: 6px; }
@@ -754,6 +753,9 @@
   <div class="splash-bar"><div class="splash-bar-fill"></div></div>
 </div>
 
+<!-- ===================== POWER HOUR BANNER ===================== -->
+<div class="ph-banner" id="ph-banner"><span class="em">⚡</span><span id="ph-text">POWER HOUR · 2× rewards</span></div>
+
 <div id="app">
 
   <!-- ===================== HOME TAB ===================== -->
@@ -763,7 +765,6 @@
         <div class="pill" id="gems-pill"><span class="em">💎</span><span class="num" id="gems-count">0</span></div>
         <div class="pill" id="streak-pill"><span class="em">🔥</span><span class="num" id="streak-count">0</span></div>
       </div>
-      <div class="ph-banner" id="ph-banner"><span class="em">⚡</span><span id="ph-text">POWER HOUR · 2×</span></div>
       <div class="right">
         <button class="gear" id="btn-undo" title="Undo" style="display:none">↶</button>
         <button class="gear" id="btn-settings" title="Settings">⚙</button>
@@ -1573,15 +1574,6 @@ function tgReady() {
     tg.expand();
     tg.setHeaderColor && tg.setHeaderColor('#a51d30');
     tg.setBackgroundColor && tg.setBackgroundColor('#a51d30');
-    // Re-fit the canvas whenever Telegram tells us the safe area or
-    // viewport changed — these can fire AFTER initial paint when the
-    // WebView is still measuring system insets (esp. on Android with
-    // the gesture nav bar). Without this, the jar floor can tuck behind
-    // the bottom tabs on tall phones.
-    const reflow = () => { applySafeArea(); try { fitCanvas(); } catch (e) {} };
-    tg.onEvent && tg.onEvent('safeAreaChanged', reflow);
-    tg.onEvent && tg.onEvent('contentSafeAreaChanged', reflow);
-    tg.onEvent && tg.onEvent('viewportChanged', reflow);
   } catch (e) {}
   applySafeArea();
 }
@@ -3440,18 +3432,9 @@ function toast(msg) {
 function fitCanvas() {
   const wrap = document.getElementById('canvas-wrap');
   const rect = wrap.getBoundingClientRect();
-  // Bail if the wrap hasn't laid out yet — calling getBoundingClientRect()
-  // before the first paint can return 0×0, which would clamp the canvas to
-  // an invisible size and silently look broken.
-  if (rect.width < 10 || rect.height < 10) return;
   const dpr = Math.min(2.5, window.devicePixelRatio || 1);
-  // Reserve a few px of breathing room at the bottom so the jar floor +
-  // a sliver of background is always visible above the tab bar. Telegram's
-  // WebView occasionally under-reports the safe-area bottom inset and the
-  // canvas would otherwise tuck its floor behind the tabs.
-  const VERTICAL_RESERVE = 12;
   const targetW = Math.min(rect.width, 420);
-  const targetH = Math.min(rect.height - VERTICAL_RESERVE, 640);
+  const targetH = Math.min(rect.height, 640);
   // Aspect ratio 360:540 (2:3). Fit width first, scale up if it leaves room.
   let cssW = targetW;
   let cssH = (cssW * 540) / 360;
@@ -3809,12 +3792,6 @@ function openFtueIfFirst() {
     } catch (e) {}
   }
   requestAnimationFrame(gameTick);
-  // Schedule a couple of follow-up fitCanvas calls — Telegram's safe-area
-  // insets sometimes arrive a few hundred ms after initial paint, and we
-  // want the jar to re-snap to the corrected available height.
-  setTimeout(fitCanvas, 120);
-  setTimeout(fitCanvas, 500);
-  setTimeout(fitCanvas, 1200);
   // Splash auto-dismiss after the loading bar finishes (1.4s + 200ms breathing room)
   setTimeout(() => {
     const sp = document.getElementById('splash');
@@ -3823,8 +3800,6 @@ function openFtueIfFirst() {
       setTimeout(() => sp.remove(), 500);
     }
     openFtueIfFirst();
-    // Final fit after splash is gone, in case the viewport reflowed.
-    setTimeout(fitCanvas, 100);
   }, 1500);
   checkAchievements();
   // Show mascot intro line briefly when game is ready
