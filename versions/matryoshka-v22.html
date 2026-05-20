@@ -746,44 +746,17 @@
   /* =========================================================
      [12] Toast
      ========================================================= */
-  /* Toast — moved to TOP in v0.3.5 because it used to land right under
-     the player's thumb at the bottom of the screen, making "+30 💎" type
-     feedback invisible. Now it pops down from above the topbar with a
-     bouncier entrance and gold styling so it reads as a reward, not
-     just info. */
   #toast {
-    position: fixed; left: 50%;
-    top: calc(var(--tg-safe-top) + 56px);
-    background: linear-gradient(180deg, #ffd84d 0%, #f5b300 100%);
-    color: #2b0a10;
-    border: 2px solid #b88317;
-    padding: 11px 18px; border-radius: 14px;
-    font-size: 15px; font-weight: 800;
-    z-index: 250; pointer-events: none;
-    opacity: 0;
-    transform: translateX(-50%) translateY(-12px);
-    transition: opacity 0.22s ease, transform 0.22s cubic-bezier(.34, 1.56, .64, 1);
-    max-width: 85vw;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.35);
-    white-space: nowrap;
-    text-align: center;
+    position: fixed; left: 50%; transform: translateX(-50%);
+    bottom: calc(var(--tab-h) + var(--tg-safe-bottom) + 22px);
+    background: rgba(0,0,0,0.82); color: #fff;
+    padding: 9px 14px; border-radius: 20px;
+    font-size: 13px; font-weight: 700;
+    z-index: 200; pointer-events: none;
+    opacity: 0; transition: opacity 0.2s ease, transform 0.2s ease;
+    max-width: 80vw;
   }
-  #toast.show {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
-  }
-
-  /* Gem pill pulse — animates briefly when the gem count changes so the
-     player gets direct feedback at the source even if they happen to be
-     on the Earn tab (where the topbar isn't visible). */
-  @keyframes pill-pulse {
-    0%   { transform: scale(1); }
-    30%  { transform: scale(1.18); }
-    60%  { transform: scale(0.97); }
-    100% { transform: scale(1); }
-  }
-  .pill.pulse { animation: pill-pulse 0.55s ease; }
-  .pill.pulse-up { background: var(--gold); color: var(--ink); }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(-4px); }
 </style>
 </head>
 <body>
@@ -2229,17 +2202,6 @@ function drawParticles() {
 // Floating score popups
 const floats = [];
 function spawnFloatScore(x, y, text) {
-  // Clamp x to stay clearly inside the jar so the popup text never bleeds
-  // out the side when merges happen near the walls. The text is roughly
-  // 80 logical units wide for combo strings like "+45  x3.0", so we keep
-  // the anchor 45+ units in from each wall.
-  const safeLeft = JAR.left + 50;
-  const safeRight = JAR.right - 50;
-  if (x < safeLeft) x = safeLeft;
-  if (x > safeRight) x = safeRight;
-  // Also clamp y so the popup never floats up into / past the topbar area
-  // of the canvas, which on tall jars can read as "outside the box".
-  if (y < JAR.top + 20) y = JAR.top + 20;
   floats.push({ x, y, text, life: 38, max: 38 });
 }
 function stepFloats() {
@@ -2762,23 +2724,7 @@ function newGame() {
    [JS-11] HUD + tier dots
    ========================================================= */
 function hudUpdate() {
-  const gemsEl = document.getElementById('gems-count');
-  const prevGems = parseInt(gemsEl.textContent, 10) || 0;
-  const newGems = state.gems || 0;
-  gemsEl.textContent = newGems;
-  // Pulse the gem pill when gems increase. Hides the topbar limitation:
-  // even when the player is on Shop/Earn (where the topbar isn't visible),
-  // the next time they swap back to Home they'll see the new total — and
-  // when they ARE on Home, they get a satisfying pulse animation.
-  if (newGems > prevGems) {
-    const pill = document.getElementById('gems-pill');
-    if (pill) {
-      pill.classList.remove('pulse', 'pulse-up');
-      void pill.offsetWidth;          // force reflow so animation re-fires
-      pill.classList.add('pulse', 'pulse-up');
-      setTimeout(() => pill.classList.remove('pulse-up'), 600);
-    }
-  }
+  document.getElementById('gems-count').textContent = state.gems || 0;
   document.getElementById('streak-count').textContent = state.streak || 0;
   document.getElementById('best-score').textContent = state.mode === 'daily'
     ? (state.dailyYMD === dailyYMD ? (state.dailyBestToday || 0) : 0)
