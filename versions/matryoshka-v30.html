@@ -1656,36 +1656,24 @@ function applySafeArea() {
       if (sa) { top = Math.max(top, sa.top || 0); bottom = Math.max(bottom, sa.bottom || 0); }
     }
   } catch (e) {}
-  // Defensive overrides (revised v0.3.9) — platform-aware now.
+  // Defensive overrides (revised v0.3.8):
   //
   // TOP — When NOT in fullscreen, Telegram's top chrome plus the device
-  // notch / status bar adds up to:
-  //   * iOS:     chrome ~44 + notch/Dynamic Island ~44 = ~88px
-  //   * Android: chrome ~44 + status bar ~30           = ~74px
-  // Telegram clients under-report this in contentSafeAreaInset on many
-  // builds, hiding our topbar behind the X Close / Dynamic Island. We
-  // floor at 92 universally — covers iOS comfortably, slightly over-
-  // pads Android (~18px wasted) but that's far better than a hidden
-  // gem pill.
+  // notch / status bar can be substantial:
+  //   * iOS:     chrome ~44 + notch/Dynamic Island ~44 = ~88px total
+  //   * Android: chrome ~44 + status bar ~30        = ~74px total
+  // Several Telegram clients under-report this in contentSafeAreaInset,
+  // so the topbar would tuck behind the "X Close" / Dynamic Island.
+  // Floor at 92px in expanded mode — guaranteed to clear both platforms.
+  // On older devices with smaller chrome this slightly over-pads, but
+  // that's a much smaller UX cost than hiding the gem pill.
   //
-  // BOTTOM — Behavior diverges hard between platforms:
-  //   * Android: Telegram already excludes the gesture nav from the
-  //     WebApp viewport, so we don't need bottom padding — adding it
-  //     creates a stripe of empty space inside the tab bar element.
-  //     Saw 80-90px over-reports from Telegram → big white strip.
-  //     Cap at 8px (basically a hairline buffer).
-  //   * iOS: the home indicator (~34px) overlaps WebApp content, so
-  //     we need ~38px padding to keep the tabs above it.
-  //   * Desktop / unknown: 24px sane default.
-  const platform = (tg && tg.platform) || '';
-  const isIOS = platform === 'ios';
-  const isAndroid = platform === 'android';
+  // BOTTOM — Telegram occasionally over-reports the bottom inset by
+  // ~3-4× (saw 80-90px on a Samsung S22 with a 24-30px gesture pill).
+  // Cap at 36px — leaves room for the iOS home indicator (~34px) while
+  // refusing the runaway over-reports.
   if (!isFullscreen && top < 92) top = 92;
-  let bottomCap;
-  if (isAndroid) bottomCap = 8;
-  else if (isIOS) bottomCap = 38;
-  else bottomCap = 24;
-  if (bottom > bottomCap) bottom = bottomCap;
+  if (bottom > 36) bottom = 36;
   document.documentElement.style.setProperty('--tg-safe-top', top + 'px');
   document.documentElement.style.setProperty('--tg-safe-bottom', bottom + 'px');
 }
