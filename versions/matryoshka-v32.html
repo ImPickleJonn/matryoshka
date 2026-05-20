@@ -2001,15 +2001,6 @@ let lastMergeAtMs = 0;
 const comboFlashes = [];      // {label, mult, life, max, scale}
 function spawnComboFlash(combo, mult) {
   const label = COMBO_LABELS[Math.min(8, combo)] || 'CHAIN';
-  // When a new combo flash arrives, speed up the decay of any existing
-  // flashes so only the LATEST label dominates the screen. Without this,
-  // a 5-merge chain stacks "NICE / COMBO / SWEET / INSANE / LEGENDARY"
-  // labels on top of each other and becomes unreadable. Cap their
-  // remaining life at 8 frames (~130ms) so they fade out gracefully
-  // while the new one fires its full 60-frame animation.
-  for (const f of comboFlashes) {
-    if (f.life > 8) f.life = 8;
-  }
   comboFlashes.push({ combo, label, mult, life: 60, max: 60, scale: 0.4, rot: (Math.random() - 0.5) * 0.18 });
 }
 function stepComboFlashes() {
