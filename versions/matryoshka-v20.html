@@ -1593,27 +1593,17 @@ function tgReady() {
   try {
     tg.ready();
     tg.expand();
-    // Bot API 8.0+ (late 2024): request TRUE fullscreen — hides Telegram's
-    // header chrome (X / bot name / ⋮) so the whole screen is gameplay.
-    // Older clients silently ignore. Also disable the vertical-swipe-down
-    // gesture so the player doesn't accidentally collapse the Mini App
-    // while flicking the carrier doll around.
-    try { tg.requestFullscreen && tg.requestFullscreen(); } catch (e) {}
-    try { tg.disableVerticalSwipes && tg.disableVerticalSwipes(); } catch (e) {}
     tg.setHeaderColor && tg.setHeaderColor('#a51d30');
     tg.setBackgroundColor && tg.setBackgroundColor('#a51d30');
     // Re-fit the canvas whenever Telegram tells us the safe area or
     // viewport changed — these can fire AFTER initial paint when the
     // WebView is still measuring system insets (esp. on Android with
     // the gesture nav bar). Without this, the jar floor can tuck behind
-    // the bottom tabs on tall phones. Also fires on fullscreen toggle,
-    // which we now trigger above.
+    // the bottom tabs on tall phones.
     const reflow = () => { applySafeArea(); try { fitCanvas(); } catch (e) {} };
     tg.onEvent && tg.onEvent('safeAreaChanged', reflow);
     tg.onEvent && tg.onEvent('contentSafeAreaChanged', reflow);
     tg.onEvent && tg.onEvent('viewportChanged', reflow);
-    tg.onEvent && tg.onEvent('fullscreenChanged', reflow);
-    tg.onEvent && tg.onEvent('fullscreenFailed', reflow);
   } catch (e) {}
   applySafeArea();
 }
@@ -1961,11 +1951,7 @@ function drawComboFlashes() {
     const p = 1 - f.life / f.max;
     const alpha = p < 0.85 ? 1 : (1 - (p - 0.85) / 0.15);
     ctx.save();
-    // LOGICAL coords: jar center is at x=180 of the 360-wide logical canvas.
-    // Bug fix (v0.3.4): was using canvas.width/2, which is the PHYSICAL
-    // buffer size after the HiDPI scaling — that translated by 630+ logical
-    // units, throwing the combo flash off-canvas to the side of the screen.
-    ctx.translate(180, 200);
+    ctx.translate(canvas.width / 2, 200);
     ctx.rotate(f.rot * (1 - p));
     ctx.scale(f.scale, f.scale);
     ctx.globalAlpha = alpha;
