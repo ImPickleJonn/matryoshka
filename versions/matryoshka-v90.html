@@ -5233,49 +5233,27 @@ function multiplierLabel(m) {
    out, claimed flags zero out, premium-pass flag clears (the player
    buys it fresh each week, like any battle pass).
 */
-// v0.3.41 — 28-step structure spec'd by Pickle:
-//   - 4 sets of 7 steps each (6 gem rewards + 1 booster reward)
-//   - Gem amounts: 1, 2, 3, 4, 5, 6 in set 1; continue from where the
-//     previous set ended, +1 per step (7-12, 13-18, 19-24)
-//   - Booster rewards in order from simplest → strongest:
-//       set 1 → undo, set 2 → shake, set 3 → hammer, set 4 → revive
-//   - Premium lane = 5× free (gems AND booster quantities)
-//   - Final threshold = 500,000 points (entire season cost)
-// Thresholds: keep the original 20-step quadratic curve × 10 for steps
-// 1-20 (1k → 250k), then extend in even-ish 40k jumps to 500k by step 28.
 const SEASON_PASS_STEPS = [
-  // Set 1 — gems 1-6, then Undo booster
-  { threshold: 1000,   free: { gems: 1 },     premium: { gems: 5 }   },
-  { threshold: 2500,   free: { gems: 2 },     premium: { gems: 10 }  },
-  { threshold: 4500,   free: { gems: 3 },     premium: { gems: 15 }  },
-  { threshold: 7000,   free: { gems: 4 },     premium: { gems: 20 }  },
-  { threshold: 10000,  free: { gems: 5 },     premium: { gems: 25 }  },
-  { threshold: 14000,  free: { gems: 6 },     premium: { gems: 30 }  },
-  { threshold: 19000,  free: { undos: 1 },    premium: { undos: 5 }  },
-  // Set 2 — gems 7-12, then Shake booster
-  { threshold: 25000,  free: { gems: 7 },     premium: { gems: 35 }  },
-  { threshold: 32000,  free: { gems: 8 },     premium: { gems: 40 }  },
-  { threshold: 40000,  free: { gems: 9 },     premium: { gems: 45 }  },
-  { threshold: 50000,  free: { gems: 10 },    premium: { gems: 50 }  },
-  { threshold: 62000,  free: { gems: 11 },    premium: { gems: 55 }  },
-  { threshold: 76000,  free: { gems: 12 },    premium: { gems: 60 }  },
-  { threshold: 92000,  free: { shakes: 1 },   premium: { shakes: 5 } },
-  // Set 3 — gems 13-18, then Hammer booster
-  { threshold: 110000, free: { gems: 13 },    premium: { gems: 65 }  },
-  { threshold: 130000, free: { gems: 14 },    premium: { gems: 70 }  },
-  { threshold: 152000, free: { gems: 15 },    premium: { gems: 75 }  },
-  { threshold: 176000, free: { gems: 16 },    premium: { gems: 80 }  },
-  { threshold: 202000, free: { gems: 17 },    premium: { gems: 85 }  },
-  { threshold: 230000, free: { gems: 18 },    premium: { gems: 90 }  },
-  { threshold: 260000, free: { hammers: 1 },  premium: { hammers: 5 }},
-  // Set 4 — gems 19-24, then Revive booster (final)
-  { threshold: 290000, free: { gems: 19 },    premium: { gems: 95 }  },
-  { threshold: 330000, free: { gems: 20 },    premium: { gems: 100 } },
-  { threshold: 370000, free: { gems: 21 },    premium: { gems: 105 } },
-  { threshold: 410000, free: { gems: 22 },    premium: { gems: 110 } },
-  { threshold: 440000, free: { gems: 23 },    premium: { gems: 115 } },
-  { threshold: 465000, free: { gems: 24 },    premium: { gems: 120 } },
-  { threshold: 500000, free: { revives: 1 },  premium: { revives: 5 }},
+  { threshold: 100,   free: { gems: 10 },     premium: { gems: 40 }   },
+  { threshold: 250,   free: { gems: 15 },     premium: { gems: 60 }   },
+  { threshold: 450,   free: { hammers: 1 },   premium: { hammers: 4 } },
+  { threshold: 700,   free: { gems: 20 },     premium: { gems: 80 }   },
+  { threshold: 1000,  free: { shakes: 1 },    premium: { shakes: 4 }  },
+  { threshold: 1400,  free: { gems: 25 },     premium: { gems: 100 }  },
+  { threshold: 1900,  free: { undos: 1 },     premium: { undos: 4 }   },
+  { threshold: 2500,  free: { gems: 30 },     premium: { gems: 120 }  },
+  { threshold: 3200,  free: { revives: 1 },   premium: { revives: 4 } },
+  { threshold: 4000,  free: { gems: 40 },     premium: { gems: 160 }  },
+  { threshold: 5000,  free: { rainbows: 1 },  premium: { rainbows: 4 }},
+  { threshold: 6200,  free: { gems: 50 },     premium: { gems: 200 }  },
+  { threshold: 7600,  free: { hammers: 2 },   premium: { hammers: 8 } },
+  { threshold: 9200,  free: { gems: 60 },     premium: { gems: 240 }  },
+  { threshold: 11000, free: { shakes: 2 },    premium: { shakes: 8 }  },
+  { threshold: 13000, free: { gems: 80 },     premium: { gems: 320 }  },
+  { threshold: 15500, free: { revives: 2 },   premium: { revives: 8 } },
+  { threshold: 18500, free: { gems: 100 },    premium: { gems: 400 }  },
+  { threshold: 21500, free: { rainbows: 2 },  premium: { rainbows: 8 }},
+  { threshold: 25000, free: { gems: 200 },    premium: { gems: 800 }  },
 ];
 const SEASON_TOTAL_TARGET = SEASON_PASS_STEPS[SEASON_PASS_STEPS.length - 1].threshold;
 
