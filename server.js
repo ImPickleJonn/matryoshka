@@ -71,6 +71,7 @@ const SYNC_FIELDS = [
   'hammers', 'shakes', 'rainbows',
   'skins', 'activeSkin',
   'lastSpinYMD', 'spinCount',
+  'season',
   'xp', 'highestTierSeen',
   'streak', 'lastPlayedYMD',
   'best',
@@ -437,6 +438,11 @@ const SKUS = {
     id: 'undo_single', title: 'Undo · ×1',
     description: 'One undo — take back your last drop.',
     price: 15, priceUsd: '$0.19', grant: { undos: 1 },
+  },
+  season_pass_premium: {
+    id: 'season_pass_premium', title: 'Season Pass · Premium',
+    description: 'Unlock 4× rewards on every step of this week\'s season pass.',
+    price: 100, priceUsd: '$1.30', grant: { seasonPremium: true },
   },
   booster_bundle: {
     id: 'booster_bundle', title: 'Booster Bundle · Best Value',

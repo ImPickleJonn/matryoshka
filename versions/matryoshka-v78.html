@@ -563,138 +563,6 @@
   }
 
   /* =========================================================
-     [09z] Season Pass — Earn tab. Two-lane 20-step ladder with
-     free + premium rewards, horizontal scroll, week countdown,
-     progress bar, premium-buy CTA.
-     ========================================================= */
-  #season-section h3 { display: flex; align-items: center; flex-wrap: wrap; }
-  .season-countdown {
-    font-size: 11px; font-weight: 700;
-    color: var(--ink-soft);
-    background: #fff5d2; border-radius: 8px;
-    padding: 2px 7px; margin-left: auto;
-    border: 1px solid #f5d77a;
-  }
-  .season-progress-shell {
-    height: 12px; background: #f3e8c8;
-    border-radius: 999px; overflow: hidden;
-    margin: 8px 0 4px;
-    border: 1px solid #ecd9a8;
-  }
-  .season-progress-bar {
-    height: 100%; width: 0%;
-    background: linear-gradient(90deg, #ffd84d 0%, #f5b300 50%, #e76f51 100%);
-    border-radius: 999px;
-    transition: width 0.4s ease;
-  }
-  .season-progress-text {
-    display: flex; justify-content: space-between;
-    font-size: 12px; font-weight: 700; color: var(--ink-soft);
-    margin-bottom: 12px;
-  }
-  .season-premium-cta {
-    display: flex; align-items: center; gap: 10px;
-    background: linear-gradient(135deg, #6c2eb5 0%, #9b5de5 100%);
-    color: #fff;
-    border-radius: 12px;
-    padding: 10px 12px;
-    margin-bottom: 12px;
-    box-shadow: 0 4px 12px rgba(108,46,181,0.3);
-  }
-  .season-premium-text { flex: 1; min-width: 0; }
-  .season-premium-text strong { font-size: 14px; }
-  .season-premium-text span { font-size: 11px; opacity: 0.92; }
-  .season-buy-btn {
-    flex-shrink: 0;
-    background: linear-gradient(180deg, #ffd84d 0%, #f5b300 100%);
-    color: #2b0a10; font-weight: 800;
-    padding: 8px 14px; font-size: 13px;
-    border: none; border-radius: 10px;
-    cursor: pointer;
-  }
-  .season-buy-btn:active { transform: translateY(1px); }
-  .season-track-wrap {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    margin: 0 -14px;
-    padding: 4px 14px;
-  }
-  .season-track {
-    display: inline-flex; gap: 6px;
-    padding-bottom: 4px;
-  }
-  .season-step {
-    width: 84px; flex-shrink: 0;
-    display: flex; flex-direction: column;
-  }
-  .step-header {
-    text-align: center;
-    margin-bottom: 5px;
-  }
-  .step-num {
-    font-size: 10px; font-weight: 800;
-    color: var(--ink-soft); letter-spacing: 0.5px;
-  }
-  .step-threshold {
-    font-size: 11px; font-weight: 800;
-    color: var(--ink);
-  }
-  .lane {
-    background: #fbf6ee;
-    border: 1.5px solid #ecd9a8;
-    border-radius: 10px;
-    padding: 7px 4px;
-    margin-bottom: 4px;
-    text-align: center;
-    cursor: default;
-    display: flex; flex-direction: column;
-    align-items: center; gap: 2px;
-    min-height: 78px;
-    justify-content: space-between;
-  }
-  .lane-label {
-    font-size: 9px; font-weight: 800; letter-spacing: 0.5px;
-    color: var(--ink-soft);
-  }
-  .lane-free .lane-label { color: #93644f; }
-  .lane-premium .lane-label { color: #6c2eb5; }
-  .lane-reward {
-    font-size: 12px; font-weight: 800;
-    color: var(--ink);
-    line-height: 1.1;
-  }
-  .lane-action {
-    font-size: 11px; color: var(--ink-soft);
-    height: 16px; line-height: 1;
-  }
-  .lane-claim-tag {
-    background: var(--ok); color: #fff;
-    font-size: 9px; font-weight: 800;
-    padding: 2px 5px; border-radius: 6px;
-    letter-spacing: 0.5px;
-  }
-  .lane.locked { opacity: 0.55; }
-  .lane.claimable {
-    background: linear-gradient(135deg, #fff5d2 0%, #ffe9a0 100%);
-    border-color: var(--gold);
-    cursor: pointer;
-    animation: lane-pulse 1.6s ease-in-out infinite;
-  }
-  .lane.claimable:active { transform: scale(0.97); }
-  @keyframes lane-pulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(245,179,0,0.5); }
-    50%      { box-shadow: 0 0 0 4px rgba(245,179,0,0.0); }
-  }
-  .lane.claimed {
-    background: #e7f6f2;
-    border-color: #4ad3ad;
-    opacity: 0.7;
-  }
-  .lane.claimed .lane-action { color: var(--ok); font-size: 16px; font-weight: 800; }
-  .lane-premium.no-premium { background: rgba(108,46,181,0.06); cursor: pointer; }
-  .lane-premium.no-premium:active { background: rgba(108,46,181,0.12); }
-
-  /* =========================================================
      [09a] Wheel of Fortune (Earn tab)
      ========================================================= */
   .spin-stage {
@@ -1222,24 +1090,6 @@
         <div id="mission-list"></div>
       </div>
 
-      <div class="earn-section" id="season-section">
-        <h3>🎟 <span data-i18n="season_pass_title">Season Pass</span> <span class="season-countdown" id="season-countdown"></span></h3>
-        <div class="season-progress-shell">
-          <div class="season-progress-bar" id="season-progress-bar"></div>
-        </div>
-        <div class="season-progress-text" id="season-progress-text"></div>
-        <div class="season-premium-cta" id="season-premium-cta">
-          <div class="season-premium-text">
-            <strong>★ Premium Pass</strong><br>
-            <span>Unlock 4× rewards on every step</span>
-          </div>
-          <button class="btn season-buy-btn" id="season-buy-premium">100 ⭐</button>
-        </div>
-        <div class="season-track-wrap">
-          <div class="season-track" id="season-track"></div>
-        </div>
-      </div>
-
       <div class="earn-section" id="spin-section">
         <h3>🎡 <span data-i18n="spin_title">Wheel of Fortune</span> <span class="spin-status" id="spin-status"></span></h3>
         <div class="spin-stage">
@@ -1656,7 +1506,6 @@ const STRINGS = {
     ftue_goal_title: 'Reach the Tsaritsa 👑',
     ftue_goal_body: 'Two Tsaritsas + 200 bonus points. How far can you climb?',
     streak_milestones: 'Streak Milestones',
-    season_pass_title: 'Season Pass',
     stats_title: 'Your Stats',
     stat_best: 'Best Score (Endless)', stat_best_daily: 'Best Daily Today',
     stat_best_tier: 'Highest Tier', stat_best_combo: 'Best Combo',
@@ -1725,7 +1574,6 @@ const STRINGS = {
     ftue_goal_title: 'Доберись до Царицы 👑',
     ftue_goal_body: 'Две Царицы = +200 очков бонуса. Как высоко ты заберёшься?',
     streak_milestones: 'Награды за серию',
-    season_pass_title: 'Сезонный Пропуск',
     stats_title: 'Твоя статистика',
     stat_best: 'Лучший счёт (Беск.)', stat_best_daily: 'Дневной рекорд',
     stat_best_tier: 'Высший уровень', stat_best_combo: 'Лучшее комбо',
@@ -2097,8 +1945,6 @@ const defaultState = () => ({
   achievements: {},      // {id: {unlockedYMD}}
   battlePassUntil: 0,
   activeTab: 'home',
-  // Season pass — see SEASON_PASS_STEPS + seasonState() for the schema.
-  season: null,
   ftueDone: false,
   mode: 'endless',       // 'endless' | 'daily'
   lastDailyYMD: '',
@@ -3673,8 +3519,6 @@ function endGame() {
     if (wasBest) state.best = score;
   }
   document.getElementById('best-score').textContent = state.mode === 'daily' ? (state.dailyBestToday || 0) : (state.best || 0);
-  // Season pass: accumulate this run's score into the weekly point pool.
-  addSeasonPoints(score);
   checkAchievements();
   // Analytics: Game Ended with all the key signals for cohort analysis
   if (typeof MX !== 'undefined' && MX.ready) {
@@ -4021,7 +3865,6 @@ function switchTab(name) {
   if (name === 'shop') renderShop();
   if (name === 'earn') {
     renderBattlePassBanner();
-    renderSeasonPass();
     renderSpinSection();
     fetchTournament();
     renderChest();
@@ -4221,14 +4064,6 @@ function applyGrant(g) {
   if (g.shieldDays) state.shieldDays = (state.shieldDays || 0) + g.shieldDays;
   if (g.skins) { state.skins = Array.from(new Set([...(state.skins || []), ...g.skins])); }
   if (g.battlePass) state.battlePassUntil = Date.now() + g.battlePass * 86400000;
-  if (g.seasonPremium) {
-    ensureSeasonFresh();
-    state.season.premium = true;
-    if (typeof MX !== 'undefined' && MX.ready) {
-      MX.track('Season Premium Bought', { season_week: state.season.weekId, points_at_buy: state.season.points });
-      MX.setProfile({ last_season_premium_week: state.season.weekId });
-    }
-  }
   // Tournament prize payload — surface a celebratory toast / modal
   if (g.tournamentPrize) {
     const tp = g.tournamentPrize;
@@ -4568,11 +4403,6 @@ function renderSpinSection() {
 }
 
 document.getElementById('spin-btn').addEventListener('click', doSpin);
-// Season Pass premium-purchase CTA at the top of the Season section
-document.getElementById('season-buy-premium').addEventListener('click', () => {
-  if (typeof MX !== 'undefined' && MX.ready) MX.track('Season Premium Buy Tapped');
-  buySku('season_pass_premium');
-});
 
 /* =========================================================
    [JS-14b] Achievements
@@ -4773,208 +4603,6 @@ function multiplierLabel(m) {
 /* =========================================================
    [JS-14e] Streak milestones
    ========================================================= */
-/* =========================================================
-   [JS-14g] Season Pass — weekly 20-step ladder w/ free + premium lanes
-   =========================================================
-   Player accumulates "season points" by summing the score of every
-   completed game during the ISO week. Each step has a score threshold
-   and rewards. Premium rewards are always 4× the free reward of the
-   same step (4× the qty of the same resource). Premium lane gates
-   behind a one-shot 100⭐ purchase that lasts the current season.
-   At each new ISO-week boundary, the season auto-resets — points zero
-   out, claimed flags zero out, premium-pass flag clears (the player
-   buys it fresh each week, like any battle pass).
-*/
-const SEASON_PASS_STEPS = [
-  { threshold: 100,   free: { gems: 10 },     premium: { gems: 40 }   },
-  { threshold: 250,   free: { gems: 15 },     premium: { gems: 60 }   },
-  { threshold: 450,   free: { hammers: 1 },   premium: { hammers: 4 } },
-  { threshold: 700,   free: { gems: 20 },     premium: { gems: 80 }   },
-  { threshold: 1000,  free: { shakes: 1 },    premium: { shakes: 4 }  },
-  { threshold: 1400,  free: { gems: 25 },     premium: { gems: 100 }  },
-  { threshold: 1900,  free: { undos: 1 },     premium: { undos: 4 }   },
-  { threshold: 2500,  free: { gems: 30 },     premium: { gems: 120 }  },
-  { threshold: 3200,  free: { revives: 1 },   premium: { revives: 4 } },
-  { threshold: 4000,  free: { gems: 40 },     premium: { gems: 160 }  },
-  { threshold: 5000,  free: { rainbows: 1 },  premium: { rainbows: 4 }},
-  { threshold: 6200,  free: { gems: 50 },     premium: { gems: 200 }  },
-  { threshold: 7600,  free: { hammers: 2 },   premium: { hammers: 8 } },
-  { threshold: 9200,  free: { gems: 60 },     premium: { gems: 240 }  },
-  { threshold: 11000, free: { shakes: 2 },    premium: { shakes: 8 }  },
-  { threshold: 13000, free: { gems: 80 },     premium: { gems: 320 }  },
-  { threshold: 15500, free: { revives: 2 },   premium: { revives: 8 } },
-  { threshold: 18500, free: { gems: 100 },    premium: { gems: 400 }  },
-  { threshold: 21500, free: { rainbows: 2 },  premium: { rainbows: 8 }},
-  { threshold: 25000, free: { gems: 200 },    premium: { gems: 800 }  },
-];
-const SEASON_TOTAL_TARGET = SEASON_PASS_STEPS[SEASON_PASS_STEPS.length - 1].threshold;
-
-// ISO week id (matches server.js convention)
-function clientIsoWeekId(d) {
-  d = new Date(d || Date.now());
-  d.setUTCHours(0, 0, 0, 0);
-  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
-  return d.getUTCFullYear() + '-W' + String(weekNo).padStart(2, '0');
-}
-function seasonEndsAtMs() {
-  // End of current ISO week = next Monday 00:00 UTC
-  const d = new Date();
-  d.setUTCHours(0, 0, 0, 0);
-  const dow = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + (8 - dow));
-  return d.getTime();
-}
-function ensureSeasonFresh() {
-  const wk = clientIsoWeekId();
-  if (!state.season || state.season.weekId !== wk) {
-    if (state.season && typeof MX !== 'undefined' && MX.ready) {
-      MX.track('Season Reset', {
-        prev_week: state.season.weekId, new_week: wk,
-        prev_points: state.season.points || 0,
-        prev_was_premium: !!state.season.premium,
-        prev_claimed_free: (state.season.claimedFree || []).length,
-        prev_claimed_premium: (state.season.claimedPremium || []).length,
-      });
-    }
-    state.season = {
-      weekId: wk,
-      points: 0,
-      premium: false,
-      claimedFree: [],
-      claimedPremium: [],
-      started_at: Date.now(),
-    };
-  }
-}
-function addSeasonPoints(amount) {
-  if (!amount || amount <= 0) return;
-  ensureSeasonFresh();
-  state.season.points = (state.season.points || 0) + Math.round(amount);
-}
-
-function renderSeasonPass() {
-  ensureSeasonFresh();
-  const sec = document.getElementById('season-section');
-  if (!sec) return;
-  const s = state.season;
-  const pts = s.points || 0;
-  const isPremium = !!s.premium;
-  // Countdown to end of week
-  const msLeft = Math.max(0, seasonEndsAtMs() - Date.now());
-  const days = Math.floor(msLeft / 86400000);
-  const hours = Math.floor((msLeft % 86400000) / 3600000);
-  const cdEl = document.getElementById('season-countdown');
-  if (cdEl) cdEl.textContent = '· ' + (days ? days + 'd ' : '') + hours + 'h';
-  // Progress bar to next step OR cap at total
-  const progressEl = document.getElementById('season-progress-bar');
-  if (progressEl) {
-    const pct = Math.min(100, (pts / SEASON_TOTAL_TARGET) * 100);
-    progressEl.style.width = pct.toFixed(1) + '%';
-  }
-  // Find next unreached step for the "Next: X" label
-  const nextStep = SEASON_PASS_STEPS.find(st => pts < st.threshold);
-  const progressTextEl = document.getElementById('season-progress-text');
-  if (progressTextEl) {
-    progressTextEl.innerHTML = '<span>' + pts.toLocaleString() + ' pts</span>' +
-      '<span>' + (nextStep ? ('Next: ' + nextStep.threshold.toLocaleString()) : 'MAX!') + '</span>';
-  }
-  // Premium CTA (hide if already premium)
-  const cta = document.getElementById('season-premium-cta');
-  if (cta) cta.style.display = isPremium ? 'none' : '';
-  // Build the 20 step columns
-  const track = document.getElementById('season-track');
-  if (!track) return;
-  track.innerHTML = '';
-  SEASON_PASS_STEPS.forEach((step, idx) => {
-    const col = document.createElement('div');
-    col.className = 'season-step';
-    if (pts >= step.threshold) col.classList.add('reached');
-    // Free lane
-    const freeClaimed = s.claimedFree.includes(idx);
-    const freeReachable = pts >= step.threshold;
-    const freeReward = formatSeasonReward(step.free);
-    const freeLane = document.createElement('div');
-    freeLane.className = 'lane lane-free' +
-      (freeClaimed ? ' claimed' : freeReachable ? ' claimable' : ' locked');
-    freeLane.innerHTML = `
-      <div class="lane-label">FREE</div>
-      <div class="lane-reward">${freeReward}</div>
-      <div class="lane-action">${freeClaimed ? '✓' : (freeReachable ? '<span class="lane-claim-tag">CLAIM</span>' : '🔒')}</div>
-    `;
-    if (freeReachable && !freeClaimed) {
-      freeLane.onclick = () => claimSeasonStep(idx, 'free');
-    }
-    // Premium lane
-    const premClaimed = s.claimedPremium.includes(idx);
-    const premReachable = pts >= step.threshold && isPremium;
-    const premReward = formatSeasonReward(step.premium);
-    const premLane = document.createElement('div');
-    premLane.className = 'lane lane-premium' +
-      (premClaimed ? ' claimed' : premReachable ? ' claimable' : ' locked') +
-      (!isPremium ? ' no-premium' : '');
-    premLane.innerHTML = `
-      <div class="lane-label">★ PRO</div>
-      <div class="lane-reward">${premReward}</div>
-      <div class="lane-action">${
-        !isPremium ? '🔒'
-        : premClaimed ? '✓'
-        : pts >= step.threshold ? '<span class="lane-claim-tag">CLAIM</span>'
-        : '🔒'
-      }</div>
-    `;
-    if (premReachable && !premClaimed) {
-      premLane.onclick = () => claimSeasonStep(idx, 'premium');
-    } else if (!isPremium) {
-      premLane.onclick = () => buySku('season_pass_premium');
-    }
-    col.innerHTML = `<div class="step-header">
-      <div class="step-num">${idx + 1}</div>
-      <div class="step-threshold">${step.threshold.toLocaleString()}</div>
-    </div>`;
-    col.appendChild(freeLane);
-    col.appendChild(premLane);
-    track.appendChild(col);
-  });
-}
-
-function formatSeasonReward(grant) {
-  if (!grant) return '—';
-  if (grant.gems)     return '💎 ' + grant.gems;
-  if (grant.hammers)  return '🔨 ×' + grant.hammers;
-  if (grant.shakes)   return '🌀 ×' + grant.shakes;
-  if (grant.undos)    return '↶ ×' + grant.undos;
-  if (grant.revives)  return '🟢 ×' + grant.revives;
-  if (grant.rainbows) return '🌈 ×' + grant.rainbows;
-  return '🎁';
-}
-
-function claimSeasonStep(idx, lane) {
-  ensureSeasonFresh();
-  const step = SEASON_PASS_STEPS[idx];
-  if (!step) return;
-  if ((state.season.points || 0) < step.threshold) return;
-  const list = lane === 'premium' ? state.season.claimedPremium : state.season.claimedFree;
-  if (list.includes(idx)) return;
-  if (lane === 'premium' && !state.season.premium) return;
-  const grant = lane === 'premium' ? step.premium : step.free;
-  applyGrant(grant);
-  list.push(idx);
-  save(); hudUpdate(); renderSeasonPass();
-  const label = formatSeasonReward(grant);
-  toast('🎟 Step ' + (idx + 1) + ' · ' + label);
-  playClaimSound();
-  tgHaptic('success');
-  if (typeof MX !== 'undefined' && MX.ready) {
-    MX.track('Season Step Claimed', {
-      step: idx + 1, threshold: step.threshold, lane,
-      reward: label, season_week: state.season.weekId,
-      points_at_claim: state.season.points,
-    });
-  }
-}
-
 const STREAK_MILESTONES = [
   { days: 3,   reward: 30 },
   { days: 7,   reward: 100 },
