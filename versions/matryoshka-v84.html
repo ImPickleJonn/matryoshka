@@ -1038,71 +1038,6 @@
   .lb-score { font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
 
   /* =========================================================
-     [10b] Season Pass snapshot — inside the game-over modal,
-     animates the progress bar from points-before to points-after
-     with ticking SFX. Tap = open full Season modal layered on top.
-     ========================================================= */
-  .season-snapshot {
-    margin-top: 16px;
-    padding: 12px;
-    background: linear-gradient(180deg, #fff8e2 0%, #f5e2b3 100%);
-    border: 1.5px solid #f5d77a;
-    border-radius: 12px;
-    cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-    transition: transform 0.12s ease;
-  }
-  .season-snapshot:active { transform: scale(0.98); }
-  .snapshot-header {
-    display: flex; justify-content: space-between; align-items: center;
-    font-size: 13px; font-weight: 800;
-    color: var(--ink);
-    margin-bottom: 8px;
-  }
-  .snapshot-delta {
-    background: linear-gradient(180deg, #4ad3ad 0%, #2a9d8f 100%);
-    color: #fff;
-    font-size: 12px; font-weight: 800;
-    padding: 2px 8px; border-radius: 999px;
-    box-shadow: 0 2px 4px rgba(42,157,143,0.3);
-  }
-  .snapshot-delta.zero {
-    background: #cdd5d7;
-    box-shadow: none;
-  }
-  .snapshot-bar-shell {
-    height: 14px;
-    background: rgba(118,72,28,0.18);
-    border-radius: 999px;
-    overflow: hidden;
-    border: 1px solid #e7b53b;
-    margin-bottom: 6px;
-    position: relative;
-  }
-  .snapshot-bar-fill {
-    height: 100%; width: 0%;
-    background: linear-gradient(90deg, #ffd84d 0%, #f5b300 50%, #e76f51 100%);
-    border-radius: 999px;
-    transition: none; /* JS-driven animation, not CSS */
-  }
-  .snapshot-text {
-    font-size: 11px; color: var(--ink-soft); font-weight: 700;
-    text-align: center;
-    font-variant-numeric: tabular-nums;
-  }
-  .snapshot-claim-row {
-    margin-top: 8px;
-    padding: 6px 10px;
-    background: linear-gradient(135deg, #fdc500 0%, #f5b300 100%);
-    color: var(--ink);
-    border-radius: 10px;
-    font-size: 12px; font-weight: 800;
-    display: flex; justify-content: space-between; align-items: center;
-    animation: claim-pulse 1.4s ease infinite;
-  }
-  .snapshot-claim-row .arrow { font-size: 14px; }
-
-  /* =========================================================
      [11a] Splash screen — brand intro on first load
      ========================================================= */
   .splash {
@@ -3244,10 +3179,6 @@ let gameRevived = false;
 // (n+1)*25⭐ on the game-over modal. Free inventory revives don't count.
 // Resets on newGame.
 let paidRevivesUsedThisRun = 0;
-// Season pass points snapshot — captured BEFORE the game's score is
-// added so the post-match snapshot card can animate from "before" to
-// "after" position on the progress bar.
-let seasonPointsBeforeGame = 0;
 
 function addScore(n) {
   score += n;
@@ -3898,11 +3829,7 @@ function endGame() {
     if (wasBest) state.best = score;
   }
   document.getElementById('best-score').textContent = state.mode === 'daily' ? (state.dailyBestToday || 0) : (state.best || 0);
-  // Season pass: capture the pre-score point total, accumulate, then
-  // the showGameOverModal snapshot section will animate from this old
-  // value to the new value.
-  ensureSeasonFresh();
-  seasonPointsBeforeGame = state.season.points || 0;
+  // Season pass: accumulate this run's score into the weekly point pool.
   addSeasonPoints(score);
   refreshSeasonStrip();
   checkAchievements();
@@ -3959,42 +3886,6 @@ function showGameOverModal(wasBest) {
     reviveBtn = `<button class="btn revive" id="m-revive-paid">🟢 ${tmpl.replace('{n}', paidPrice)}</button>`;
   }
 
-  // Build the Season Pass snapshot — bar starts at the pre-game position
-  // and we animate it to the post-game position after the modal renders.
-  const pointsBefore = seasonPointsBeforeGame || 0;
-  const pointsAfter = (state.season && state.season.points) || 0;
-  const delta = Math.max(0, pointsAfter - pointsBefore);
-  const startPct = Math.min(100, (pointsBefore / SEASON_TOTAL_TARGET) * 100);
-  // Count newly-claimable steps (threshold crossed THIS game OR unclaimed earlier
-  // steps the player is already eligible for).
-  const claimableNow = countSeasonClaimable(pointsAfter);
-  const newlyCrossed = SEASON_PASS_STEPS.filter(st =>
-    st.threshold > pointsBefore && st.threshold <= pointsAfter
-  ).length;
-  // Find next-step threshold for the readout
-  const nextStep = SEASON_PASS_STEPS.find(st => pointsAfter < st.threshold);
-  const ssText = pointsAfter.toLocaleString() + ' / ' +
-    (nextStep ? nextStep.threshold.toLocaleString() : SEASON_TOTAL_TARGET.toLocaleString()) +
-    (nextStep ? ' to next step' : ' · MAX!');
-  const claimRowHtml = claimableNow > 0
-    ? `<div class="snapshot-claim-row">
-         <span>🎁 ${claimableNow} reward${claimableNow === 1 ? '' : 's'} ready!</span>
-         <span class="arrow">View →</span>
-       </div>`
-    : '';
-  const snapshotHtml = `
-    <div class="season-snapshot" id="game-over-snapshot">
-      <div class="snapshot-header">
-        <span>🎟 Season Pass</span>
-        <span class="snapshot-delta ${delta > 0 ? '' : 'zero'}">+${delta.toLocaleString()}</span>
-      </div>
-      <div class="snapshot-bar-shell">
-        <div class="snapshot-bar-fill" id="snapshot-bar-fill" style="width:${startPct.toFixed(1)}%"></div>
-      </div>
-      <div class="snapshot-text" id="snapshot-text">${ssText}</div>
-      ${claimRowHtml}
-    </div>
-  `;
   body.innerHTML = `
     <h3>${wasBest ? '🎉 ' + t('new_high') : t('game_over')}</h3>
     <div class="big">${score}</div>
@@ -4004,7 +3895,6 @@ function showGameOverModal(wasBest) {
       <button class="btn" id="m-newgame">🪆 ${t('play_again')}</button>
       <button class="btn ghost" id="m-share">📤 Share</button>
     </div>
-    ${snapshotHtml}
   `;
   // Lock the backdrop — game over should be terminal-action only. Player
   // must explicitly tap revive / play again / share to dismiss. Accidental
@@ -4025,29 +3915,6 @@ function showGameOverModal(wasBest) {
   }
   document.getElementById('m-newgame').onclick = () => { hideModal(); newGame(); };
   document.getElementById('m-share').onclick = () => shareScore();
-  // Season Pass snapshot — tapping opens the full Season modal on top
-  // of the game-over modal. Game-over stays underneath (modal-shade has
-  // z-index 90, season-shade 95) so the player can close the season
-  // modal and return to revive / play-again options without losing
-  // their place.
-  const snapshotEl = document.getElementById('game-over-snapshot');
-  if (snapshotEl) {
-    snapshotEl.onclick = () => {
-      if (typeof MX !== 'undefined' && MX.ready) MX.track('Season Modal Opened', { source: 'game_over_snapshot' });
-      openSeasonModal();
-    };
-  }
-  // Animate the snapshot progress bar from points-before to points-after
-  // with ticking SFX. Slight delay so the modal-in animation has settled.
-  setTimeout(() => {
-    animateSeasonSnapshot(pointsBefore, pointsAfter, newlyCrossed);
-  }, 380);
-  if (typeof MX !== 'undefined' && MX.ready) {
-    MX.track('Season Snapshot Shown', {
-      points_before: pointsBefore, points_after: pointsAfter, delta,
-      newly_crossed: newlyCrossed, claimable_now: claimableNow,
-    });
-  }
   // Analytics — track that we OFFERED the revive (impression). Helps
   // compute the offer→purchase conversion rate in Mixpanel.
   if (typeof MX !== 'undefined' && MX.ready) {
@@ -4583,13 +4450,6 @@ function applyGrant(g) {
       MX.track('Season Premium Bought', { season_week: state.season.weekId, points_at_buy: state.season.points });
       MX.setProfile({ last_season_premium_week: state.season.weekId });
     }
-    // Live-refresh fix (v0.3.37): when the player buys premium WHILE the
-    // Season modal is open, re-render the modal so the ★ PRO lanes
-    // immediately unlock and claim buttons appear — was requiring a
-    // manual close + reopen to see the new state.
-    const shade = document.getElementById('season-shade');
-    if (shade && shade.classList.contains('show')) renderSeasonPass();
-    refreshSeasonStrip();
   }
   // Tournament prize payload — surface a celebratory toast / modal
   if (g.tournamentPrize) {
@@ -5323,75 +5183,6 @@ function renderSeasonPass() {
       }
     };
   });
-}
-
-// Count steps that are unlocked-but-not-claimed across both lanes
-// (premium lane only counts if state.season.premium is true).
-function countSeasonClaimable(pts) {
-  ensureSeasonFresh();
-  const s = state.season;
-  let n = 0;
-  SEASON_PASS_STEPS.forEach((st, idx) => {
-    if (pts >= st.threshold) {
-      if (!s.claimedFree.includes(idx)) n++;
-      if (s.premium && !s.claimedPremium.includes(idx)) n++;
-    }
-  });
-  return n;
-}
-
-// Smooth ease-out animation of the snapshot bar from `before` % to
-// `after` %, with ascending tick tones. If the player crossed any
-// step thresholds during this game, fire a triumphant flourish at
-// the end of the bar growth.
-function animateSeasonSnapshot(pointsBefore, pointsAfter, newlyCrossed) {
-  const fill = document.getElementById('snapshot-bar-fill');
-  const textEl = document.getElementById('snapshot-text');
-  if (!fill) return;
-  const startPct = Math.min(100, (pointsBefore / SEASON_TOTAL_TARGET) * 100);
-  const endPct   = Math.min(100, (pointsAfter  / SEASON_TOTAL_TARGET) * 100);
-  if (endPct <= startPct + 0.05) {
-    // No measurable growth — just paint final state and exit (no sound)
-    fill.style.width = endPct.toFixed(1) + '%';
-    return;
-  }
-  const durMs = 1300;
-  const startMs = performance.now();
-  let lastToneMs = 0;
-  function tick() {
-    const t = Math.min(1, (performance.now() - startMs) / durMs);
-    // Ease-out cubic so the bar surges then decelerates into the new position
-    const eased = 1 - Math.pow(1 - t, 3);
-    const pct = startPct + (endPct - startPct) * eased;
-    fill.style.width = pct.toFixed(1) + '%';
-    // Live update the points readout so the number ticks up with the bar
-    if (textEl) {
-      const liveP = Math.round(pointsBefore + (pointsAfter - pointsBefore) * eased);
-      const nx = SEASON_PASS_STEPS.find(st => liveP < st.threshold);
-      textEl.textContent = liveP.toLocaleString() + ' / ' +
-        (nx ? nx.threshold.toLocaleString() : SEASON_TOTAL_TARGET.toLocaleString()) +
-        (nx ? ' to next step' : ' · MAX!');
-    }
-    // Ticking tones every ~90ms during the fill (ascending pitch)
-    const nowMs = performance.now();
-    if (nowMs - lastToneMs > 90) {
-      tone(330 + t * 250, 0.05, 'triangle', 0.06);
-      lastToneMs = nowMs;
-    }
-    if (t < 1) requestAnimationFrame(tick);
-    else {
-      // Finish flourish — bigger if a milestone was crossed
-      if (newlyCrossed > 0) {
-        tone(660, 0.12, 'triangle', 0.14);
-        setTimeout(() => tone(880, 0.16, 'triangle', 0.14), 100);
-        setTimeout(() => tone(1320, 0.20, 'sine', 0.12), 220);
-        tgHaptic('success');
-      } else {
-        tone(660, 0.10, 'triangle', 0.10);
-      }
-    }
-  }
-  requestAnimationFrame(tick);
 }
 
 function openSeasonModal() {
