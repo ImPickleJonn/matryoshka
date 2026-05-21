@@ -54,7 +54,7 @@ Open your bot in Telegram, send `/start`. You should get the EN/RU welcome messa
 
 What you should see (in order):
 1. Brief splash screen with the bobbing 🪆 logo
-2. **FTUE** — 5-step animated tutorial (drop, merge, death line, Tsarina goal). Skippable.
+2. **FTUE** — 5-step animated tutorial (drop, merge, death line, Tsaritsa goal). Skippable.
 3. The game itself, with the carrier doll at top, the jar below, and the mascot Grandma in the bottom-left.
 
 Walk through:

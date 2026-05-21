@@ -65,7 +65,7 @@
 
   <div class="row stage">
     <div class="card">
-      <h2>AVATAR — Square Tsarina</h2>
+      <h2>AVATAR — Square Tsaritsa</h2>
       <canvas id="avatar" width="320" height="320"></canvas>
       <div class="btns">
         <button class="btn" data-dl="avatar" data-size="512">512×512</button>
@@ -174,7 +174,7 @@ function drawMatryoshka(c, x, y, r, tier, angle, scale) {
   c.arc(0, -r*0.30, r*0.08, 0.1*Math.PI, 0.9*Math.PI);
   c.stroke();
 
-  // Floral motif — for the avatar Tsarina (tier 10) we always draw the full
+  // Floral motif — for the avatar Tsaritsa (tier 10) we always draw the full
   // 5-petal flower because the silhouette reads at small avatar sizes.
   c.fillStyle = pal.scarf;
   const fr = r*0.13;
@@ -227,7 +227,7 @@ function drawMatryoshka(c, x, y, r, tier, angle, scale) {
 }
 
 // ===== Renderers ====================================================
-// Pick the Tsarina (tier 10, with crown) as the hero subject — the strongest
+// Pick the Tsaritsa (tier 10, with crown) as the hero subject — the strongest
 // silhouette and the most "Russian" read for a brand avatar.
 const HERO_TIER = 10;
 
@@ -257,7 +257,7 @@ function renderAvatar(c, size) {
     c.beginPath(); c.arc(px, py, Math.max(0.5, sz), 0, Math.PI*2); c.fill();
   }
 
-  // Hero doll — Tsarina, centered slightly low so crown sits at proper height
+  // Hero doll — Tsaritsa, centered slightly low so crown sits at proper height
   const r = size * 0.30;
   drawMatryoshka(c, size/2, size*0.56, r, HERO_TIER, 0, 1);
 }

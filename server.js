@@ -115,7 +115,7 @@ const FAKE_PLAYER_NAMES = [
   'Ksenia', 'Marina', 'Inga', 'Galina', 'Lyosha', 'Kira', 'Sonya',
   'David', 'Sarah', 'Emma', 'John', 'Sophie', 'Liam', 'Ava', 'Noah',
   'Mia', 'James', 'Olivia', 'Lucas', 'Zoe', 'Felix', 'Nora', 'Henry',
-  '🪆 Babushka', '⚡ Tsarina', '💎 Zara', '🌹 Roza', '🎀 Veronika',
+  '🪆 Babushka', '⚡ Tsaritsa', '💎 Zara', '🌹 Roza', '🎀 Veronika',
   'DollMaster', 'MergeQueen', 'StackBoyar', 'NestKing', 'WoodWizard',
   'KremlinKid', 'SamovarSam', 'GoldenDoll', 'ВолжскийВетер', 'СибирскийМороз',
   'Tower', 'Beacon', 'Forge', 'Rift', 'Echo',
@@ -818,7 +818,7 @@ app.get('/share/:id', (req, res) => {
   const title = '🪆 ' + (score > 0
     ? (escHtml(name) + ' scored ' + score + ' on Matryoshka — beat them!')
     : 'Matryoshka — drop, merge, reign');
-  const desc = 'Drop nesting dolls. Merge same sizes. Reach the legendary Tsarina.';
+  const desc = 'Drop nesting dolls. Merge same sizes. Reach the legendary Tsaritsa.';
   res.set('Content-Type', 'text/html; charset=utf-8');
   res.set('Cache-Control', 'public, max-age=600');
   res.send(`<!DOCTYPE html>
@@ -1031,7 +1031,7 @@ async function sendWelcome(chatId, firstName, lang) {
       `🎯 *How to play*\n` +
       `• Drop nesting dolls into the jar\n` +
       `• Two same-size dolls merge into the next size up\n` +
-      `• Get all the way to the Tsarina!\n\n` +
+      `• Get all the way to the Tsaritsa!\n\n` +
       `🎁 *What's inside*\n` +
       `• 7-day daily login chest (up to 500 💎)\n` +
       `• Weekly tournament with gem prizes\n` +

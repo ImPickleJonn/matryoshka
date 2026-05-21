@@ -1,6 +1,6 @@
 # Matryoshka
 
-A drop-and-merge nesting-doll puzzle for Telegram. Mechanics inspired by the proven Suika / Watermelon-merge category, re-skinned with 11 tiers of Russian nesting dolls — drop them into the jar, merge two same-size dolls into the next size up, climb all the way to the **Tsarina**.
+A drop-and-merge nesting-doll puzzle for Telegram. Mechanics inspired by the proven Suika / Watermelon-merge category, re-skinned with 11 tiers of Russian nesting dolls — drop them into the jar, merge two same-size dolls into the next size up, climb all the way to the **Tsaritsa**.
 
 Single-file frontend (`index.html`), Express server (`server.js`), Stars-only IAP (no ads, ever).
 
@@ -25,7 +25,7 @@ If you don't have Node, grab the LTS from https://nodejs.org.
 
 - 11 tiers of matryoshka (`Зёрнышко` → `Царица`). Player drops one of the smallest 5 from a finger position above the jar.
 - Two same-tier dolls touching = merge into the next size, awarding tier-scaled score (3, 6, 10, 15, 21, 28, 36, 45, 55, 66).
-- Two Tsarinas (T11) touching = celebration burst + 200 bonus points, both removed.
+- Two Tsaritsas (T11) touching = celebration burst + 200 bonus points, both removed.
 - Any stationary doll above the dashed death line for ~1.6 s = game over.
 
 ## Scope status (v0.3.0 — 2026-05-20)
@@ -39,8 +39,8 @@ If you don't have Node, grab the LTS from https://nodejs.org.
 - ✅ **Stats panel** — accessible via Settings → 📊 Stats. 9 lifetime rows: Best Score (Endless), Best Daily Today, Highest Tier, Best Combo, Games Played, Total Merges, Current Streak, Gems, Skins Owned (X / 5).
 - ✅ **Streak milestones** — new Earn-tab section with 5 claimable tiles: 3 / 7 / 14 / 30 / 100 day streaks → 30 / 100 / 300 / 750 / 2500 💎. Unlocked-but-unclaimed tiles pulse with claim animation. Multiplier-aware.
 - ✅ **2 new skins**: **Neon** (200⭐) — cyber-vibrant body colors cycling through 11 hues, dark-galaxy aprons, white sparkle accents; **Wood** (200⭐) — warm hand-carved wood tones (light cherry → dark walnut → birch) with brown scarves. Full palette overrides via the existing `SKINS` registry. Skin picker in Settings now shows all 5.
-- ✅ **5 more achievements** (15 total) — `combo_5` / `combo_10` / `daily_first` / `collector_3` / `collector_5`. `markAchievementProgress(id)` side-flag system handles event-driven unlocks (combo highs, Tsarina pair, daily play).
-- ✅ **Tsarina × Tsarina detection** — wired to `tsarina_pair` achievement hook on the double-Tsarina merge event.
+- ✅ **5 more achievements** (15 total) — `combo_5` / `combo_10` / `daily_first` / `collector_3` / `collector_5`. `markAchievementProgress(id)` side-flag system handles event-driven unlocks (combo highs, Tsaritsa pair, daily play).
+- ✅ **Tsaritsa × Tsaritsa detection** — wired to `tsarina_pair` achievement hook on the double-Tsaritsa merge event.
 - ✅ **i18n full coverage** — every one of the 20 supported languages now ships ~15+ keys (HUD + tabs + modes + game-over + settings + earn + how-to-play + stats). EN + RU still cover every key including FTUE bodies + step copy; the other 18 fall back gracefully via `t()`.
 
 ## Scope status (v0.2.1 — 2026-05-20)
@@ -51,7 +51,7 @@ If you don't have Node, grab the LTS from https://nodejs.org.
   2. **Slide and Drop** — animated finger hint sliding a carrier across the jar then dropping
   3. **Same Sizes Merge!** — two T1 dolls fall, collide, flash, become a T2 with a +3 score popup
   4. **Watch the Red Line** — pulsing dashed death line + bobbing doll with red glow over it
-  5. **Reach the Tsarina 👑** — orbiting sparkles around a bobbing T11 with crown
+  5. **Reach the Tsaritsa 👑** — orbiting sparkles around a bobbing T11 with crown
 - ✅ Replay via Settings → **🎓 How to Play** button
 - ✅ Migration: pre-v0.2.1 users (who already had `state.welcomed=true`) are not forced through the tutorial — `state.ftueDone` is set silently
 - ✅ i18n: all FTUE strings full in **EN + RU**, and step titles/bodies in **es / pt / fr / de / uk**
@@ -61,7 +61,7 @@ If you don't have Node, grab the LTS from https://nodejs.org.
 
 ### Core gameplay
 - ✅ Physics: gravity, circle-circle collision with iterative solver, walls/floor, restitution, dampening
-- ✅ 11 canvas-drawn matryoshka tiers (face, scarf, apron, floral motif, Tsarina crown)
+- ✅ 11 canvas-drawn matryoshka tiers (face, scarf, apron, floral motif, Tsaritsa crown)
 - ✅ Drop UX: finger-drag carrier, drop on release, 420ms cooldown
 - ✅ Score, high score, merge count, streak, tier-progression dock
 - ✅ Game over + revive (consumes one revive, clears top 3 dolls)
