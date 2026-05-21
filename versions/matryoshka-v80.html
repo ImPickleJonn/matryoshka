@@ -489,33 +489,6 @@
   .sku-card .sku-buy.admin-price .star { color: #fff5d2; }
 
   /* =========================================================
-     [08c] Gem shop — secondary section below the Stars SKUs in
-     the Shop tab. Players spend earned gems on single-shot
-     boosters at 10× the Stars rate.
-     ========================================================= */
-  .gem-shop-header {
-    margin: 24px 0 12px;
-    padding-top: 16px;
-    border-top: 2px dashed #ecd9a8;
-  }
-  .gem-shop-header h2 {
-    text-align: center; font-size: 22px;
-    color: var(--ink); font-weight: 800;
-    margin: 0 0 4px;
-  }
-  .sku-card.gem-card .sku-buy.gem-buy {
-    background: linear-gradient(180deg, #6fd8c0 0%, #2a9d8f 100%);
-    color: #fff;
-    box-shadow: 0 2px 5px rgba(42,157,143,0.35);
-  }
-  .sku-card.gem-card .sku-buy.gem-buy .gem { color: #fff5d2; }
-  .sku-card.gem-card .sku-buy.gem-buy.disabled {
-    background: #cdd5d7; color: rgba(255,255,255,0.85);
-    box-shadow: none; cursor: not-allowed;
-  }
-  .sku-card.gem-card.not-enough { opacity: 0.82; }
-
-  /* =========================================================
      [09] Earn tab
      ========================================================= */
   .earn-section {
@@ -1229,13 +1202,6 @@
         </div>
       </div>
       <div class="sku-grid" id="sku-grid"></div>
-
-      <div class="gem-shop-header">
-        <h2>💎 <span data-i18n="gem_shop_title">Use your Gems</span></h2>
-        <div class="sub"><span data-i18n="gem_shop_sub">Earn gems by playing — spend them here.</span>
-          <strong style="color:var(--gold-deep)"> · <span id="gem-shop-balance">0</span> 💎</strong></div>
-      </div>
-      <div class="sku-grid" id="gem-sku-grid"></div>
     </div>
   </div>
 
@@ -1636,8 +1602,6 @@ const STRINGS = {
     skin: 'Skin',
     language: 'Language',
     shop_title: '⭐ Shop', shop_sub: 'Telegram Stars only. No ads, ever.',
-    gem_shop_title: 'Use your Gems',
-    gem_shop_sub: 'Earn gems by playing — spend them here.',
     earn_title: '🎁 Earn', earn_sub: 'Free gems, missions, leaderboard.',
     daily_chest: 'Daily Login Chest', claim_today: 'Claim Today',
     chest_claimed: 'Claimed', come_back: 'Come back tomorrow!',
@@ -1714,8 +1678,6 @@ const STRINGS = {
     skin: 'Скин',
     language: 'Язык',
     shop_title: '⭐ Магазин', shop_sub: 'Только Telegram Stars. Без рекламы.',
-    gem_shop_title: 'Потрать гемы',
-    gem_shop_sub: 'Зарабатывай гемы в игре — трать их здесь.',
     earn_title: '🎁 Бонусы', earn_sub: 'Бесплатные гемы, миссии, рейтинг.',
     daily_chest: 'Ежедневный сундук', claim_today: 'Забрать сегодня',
     chest_claimed: 'Получено', come_back: 'Возвращайся завтра!',
@@ -4115,18 +4077,6 @@ const SKU_DISPLAY = [
     title_key: 'Season Pass · 30 days', desc: '2× daily rewards + skin + bonus' },
 ];
 
-// Gem store — accumulated gems get a real spend path. Pricing is 10× the
-// equivalent Stars price (1 ⭐ ≈ 10 💎). Single-shot boosters + revive are
-// the most useful in-game items, so this is where gems pay off. Packs,
-// skins, and season-pass premium stay Stars-only — Stars stay premium.
-const GEM_SHOP_ITEMS = [
-  { id: 'revive_oneshot_gems', icon: '🟢', gems: 250, title: 'Revive · ×1', desc: 'Clear top dolls, keep playing', grant: { revives: 1 } },
-  { id: 'hammer_single_gems',  icon: '🔨', gems: 200, title: 'Hammer · ×1', desc: 'Tap a doll to remove it',       grant: { hammers: 1 } },
-  { id: 'shake_single_gems',   icon: '🌀', gems: 150, title: 'Shake · ×1',  desc: 'Jostle every doll in the jar',   grant: { shakes: 1 } },
-  { id: 'undo_single_gems',    icon: '↶',  gems: 150, title: 'Undo · ×1',   desc: 'Take back your last drop',       grant: { undos: 1 } },
-  { id: 'rainbow_single_gems', icon: '🌈', gems: 450, title: 'Rainbow · ×1', desc: 'Merges with any size',          grant: { rainbows: 1 } },
-];
-
 // Admin state — populated by /api/admin/whoami on boot. Server validates
 // initData and only returns admin:true for allow-listed Telegram IDs, so
 // the UI flag is purely cosmetic; the price override is enforced server-
@@ -4189,59 +4139,6 @@ function renderShop() {
   grid.querySelectorAll('.sku-buy').forEach(b => {
     b.onclick = () => buySku(b.getAttribute('data-sku'));
   });
-  renderGemShop();
-}
-
-function renderGemShop() {
-  const grid = document.getElementById('gem-sku-grid');
-  if (!grid) return;
-  const have = state.gems || 0;
-  document.getElementById('gem-shop-balance').textContent = have.toLocaleString();
-  grid.innerHTML = '';
-  for (const item of GEM_SHOP_ITEMS) {
-    const affordable = have >= item.gems;
-    const card = document.createElement('div');
-    card.className = 'sku-card gem-card' + (affordable ? '' : ' not-enough');
-    card.innerHTML = `
-      <div class="sku-icon">${item.icon}</div>
-      <div class="sku-title">${item.title}</div>
-      <div class="sku-desc">${item.desc}</div>
-      <button class="sku-buy gem-buy ${affordable ? '' : 'disabled'}" data-gem-sku="${item.id}">
-        ${item.gems} <span class="gem">💎</span>
-      </button>
-    `;
-    grid.appendChild(card);
-  }
-  grid.querySelectorAll('.gem-buy').forEach(b => {
-    b.onclick = () => buyWithGems(b.getAttribute('data-gem-sku'));
-  });
-}
-
-function buyWithGems(skuId) {
-  const item = GEM_SHOP_ITEMS.find(x => x.id === skuId);
-  if (!item) return;
-  const have = state.gems || 0;
-  if (have < item.gems) {
-    toast('Need ' + (item.gems - have).toLocaleString() + ' more 💎');
-    if (typeof MX !== 'undefined' && MX.ready) {
-      MX.track('Gem Purchase Insufficient', { sku: skuId, cost: item.gems, have });
-    }
-    tgHaptic('warning');
-    return;
-  }
-  state.gems = have - item.gems;
-  applyGrant(item.grant);
-  save(); hudUpdate(); renderGemShop();
-  toast('+ ' + item.title);
-  playClaimSound();
-  tgHaptic('success');
-  if (typeof MX !== 'undefined' && MX.ready) {
-    MX.track('Gem Purchase', {
-      sku: skuId, cost: item.gems, gems_remaining: state.gems,
-      grant_summary: JSON.stringify(item.grant),
-    });
-    MX.incrementProfile({ total_gem_purchases: 1, total_gems_spent: item.gems });
-  }
 }
 
 async function buySku(sku) {
