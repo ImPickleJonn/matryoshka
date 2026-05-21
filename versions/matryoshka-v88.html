@@ -98,10 +98,9 @@
      [03] Score banner
      ========================================================= */
   .score-row {
-    /* v0.3.39 — moved BELOW the season strip and right next to the
-       canvas (was at safe-top+62 above the strip). Order is now
-       topbar → season-strip → score-row → canvas. */
-    position: absolute; top: calc(var(--tg-safe-top) + 102px);
+    /* Shifted down 12px (50 → 62) in v0.3.12 — follows the topbar's
+       new lower position so the gap below it stays the same. */
+    position: absolute; top: calc(var(--tg-safe-top) + 62px);
     left: 0; right: 0;
     display: flex; align-items: center; justify-content: center;
     gap: 18px;
@@ -164,13 +163,9 @@
      ========================================================= */
   #canvas-wrap {
     position: absolute;
-    /* v0.3.39 — top tightened 188 → 156 because:
-         - safe-top floor dropped 140 → 110 (-30 saved)
-         - score-row moved BELOW the season strip and right next to
-           the canvas (lots of vertical space reclaimed)
-         - daily mode-row gone (was at safe-top+116)
-       Net: ~62px less padding above the jar. */
-    top: calc(var(--tg-safe-top) + 156px);
+    /* +40px in v0.3.35 to make room for the new Season Pass progress
+       strip (height 30 + 10px gap). The strip lives at safe-top+148. */
+    top: calc(var(--tg-safe-top) + 188px);
     /* CSS absolute positioning ignores the parent's padding — so we can't
        rely on #app's padding-bottom to push us above the bottom tabs. We
        explicitly subtract the tab height + safe-area-bottom here. */
@@ -1408,10 +1403,12 @@
     </div>
 
     <button class="season-strip" id="season-strip">
-      <div class="season-strip-fill" id="season-strip-fill"></div>
-      <div class="season-strip-label"><span class="season-strip-star" id="season-strip-star">★</span>🎟</div>
+      <div class="season-strip-label"><span class="season-strip-star" id="season-strip-star"></span>🎟 <span data-i18n="season_pass_title">Season Pass</span></div>
+      <div class="season-strip-bar">
+        <div class="season-strip-fill" id="season-strip-fill"></div>
+        <div class="season-strip-next-reward" id="season-strip-next-reward"></div>
+      </div>
       <div class="season-strip-pts" id="season-strip-pts">0 / 100</div>
-      <div class="season-strip-next-reward" id="season-strip-next-reward"></div>
     </button>
 
 
@@ -2477,12 +2474,14 @@ function applySafeArea() {
   const platform = (tg && tg.platform) || '';
   const isIOS = platform === 'ios';
   const isAndroid = platform === 'android';
-  // v0.3.39 — floor reduced 140 → 110. Player feedback: 140 left too
-  // much empty space between the top of the screen and the topbar.
-  // 110 still clears the Telegram chrome on most clients (iPhone
-  // Dynamic Island chrome bottom ~100-105px) with a tiny buffer.
-  // The fullscreen check stays disabled — always apply the floor.
-  if (top < 110) top = 110;
+  // v0.3.12: floor bumped 115 → 140 and removed the !isFullscreen
+  // exemption. The fullscreen check was unreliable — on some clients
+  // tg.isFullscreen returned a truthy value even though the chrome
+  // was still visible, causing my floor to be skipped and the
+  // topbar to tuck behind Telegram's X Close button. Always apply
+  // the floor; if fullscreen actually engages (chrome hidden), the
+  // ~80px of wasted top space is a much smaller cost than hidden UI.
+  if (top < 140) top = 140;
   let bottomCap;
   if (isAndroid) bottomCap = 8;
   else if (isIOS) bottomCap = 38;
