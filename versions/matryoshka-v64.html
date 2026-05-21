@@ -1167,7 +1167,7 @@
    ========================================================= */
 'use strict';
 
-const MX_VERSION = 'v0.3.26';
+const MX_VERSION = 'v0.3.16';
 const MX = {
   token: '',
   distinctId: null,
@@ -3509,13 +3509,7 @@ function endGame() {
 
 function showGameOverModal(wasBest) {
   const hasFreeRevive = (state.revives || 0) > 0;
-  // Only suppress the paid button when we definitely cannot offer IAP
-  // (i.e., running in a regular browser, no Telegram WebApp at all).
-  // The old (tg && getInitData()) check was too strict — initData can
-  // be transiently empty on some Telegram clients even when openInvoice
-  // would still work. Now: if tg exists, show the button. buyRevive()
-  // gracefully toasts an error if the invoice can't be created.
-  const canPaidRevive = !!tg;
+  const canPaidRevive = !!(tg && getInitData());
   const paidPrice = (paidRevivesUsedThisRun + 1) * 25;
   const body = document.getElementById('modal-body');
 
