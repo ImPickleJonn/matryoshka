@@ -227,18 +227,8 @@
   }
   .booster-btn:active { transform: scale(0.92); }
   .booster-btn.disabled {
-    /* Stronger disabled visual in v0.3.32 so players don't think a
-       disabled button is tappable. Combined with a clearer toast when
-       they DO tap (e.g., "Drop a doll first to enable undo"). */
-    opacity: 0.42;
-    filter: grayscale(0.7);
-    background: linear-gradient(180deg, #f6e8c8 0%, #e7d3a8 100%);
-    border-color: #c8a865;
-    box-shadow: none;
-  }
-  .booster-btn.disabled .count {
-    background: #8a7a5e;
-    color: rgba(255,255,255,0.85);
+    opacity: 0.55;
+    filter: grayscale(0.4);
   }
   .booster-btn .count {
     position: absolute;
@@ -1473,7 +1463,7 @@ const STRINGS = {
     iap_unavailable: 'Open from Telegram to buy Stars items.',
     purchase_success: 'Purchase added!',
     insufficient_gems: 'Not enough gems.',
-    undo_used: 'Undo!', no_undo: 'Drop a doll first to enable undo', no_undos_left: 'No undos left',
+    undo_used: 'Undo!', no_undo: 'Nothing to undo', no_undos_left: 'No undos left',
     revive_used: 'Revive!',
     no_revives: 'No revives left',
     // Includes the @bot mention so recipients see a clickable Telegram link
@@ -1548,7 +1538,7 @@ const STRINGS = {
     iap_unavailable: 'Открой из Telegram чтобы покупать.',
     purchase_success: 'Покупка добавлена!',
     insufficient_gems: 'Недостаточно гемов.',
-    undo_used: 'Отмена!', no_undo: 'Сначала брось матрёшку', no_undos_left: 'Закончились отмены',
+    undo_used: 'Отмена!', no_undo: 'Нечего отменять', no_undos_left: 'Закончились отмены',
     revive_used: 'Возрождение!',
     no_revives: 'Нет возрождений',
     share_text: '🪆 Мой счёт в Матрёшке — {score}! 🎮 Победи меня →',
@@ -3114,20 +3104,16 @@ function refreshBoosterHUD() {
   const shks = state.shakes  || 0;
   const rbs  = state.rainbows || 0;
   const uds  = state.undos    || 0;
-  hc.textContent = hams; sc.textContent = shks; rc.textContent = rbs;
-  // Undo badge shows 0 (and disables) when there's no snapshot to undo,
-  // regardless of inventory. Players see at a glance "undo is not
-  // available right now" even if they have charges in the pocket.
-  uc.textContent = undoSnapshot ? uds : 0;
+  hc.textContent = hams; sc.textContent = shks; rc.textContent = rbs; uc.textContent = uds;
   hc.classList.toggle('zero', hams <= 0);
   sc.classList.toggle('zero', shks <= 0);
   rc.classList.toggle('zero', rbs <= 0);
-  uc.classList.toggle('zero', !undoSnapshot || uds <= 0);
+  uc.classList.toggle('zero', uds <= 0);
   hammerBtn.classList.toggle('disabled', hams <= 0);
   shakeBtn.classList.toggle('disabled',  shks <= 0);
   rainbowBtn.classList.toggle('disabled', rbs <= 0 && !pendingRainbow);
-  // Undo is special: requires BOTH an undoSnapshot AND a charge. Either
-  // missing → disabled style.
+  // Undo is special: also requires an undoSnapshot. Disabled style if
+  // either count is zero OR no snapshot exists.
   undoBtn.classList.toggle('disabled', uds <= 0 || !undoSnapshot);
   hammerBtn.classList.toggle('active', activeBooster === 'hammer');
   rainbowBtn.classList.toggle('active', pendingRainbow);
