@@ -160,9 +160,8 @@
      ========================================================= */
   #canvas-wrap {
     position: absolute;
-    /* 148 → 196 in v0.3.30 — booster row now occupies the band that
-       was previously empty between mode-row and canvas. */
-    top: calc(var(--tg-safe-top) + 196px);
+    /* 132 → 148 in v0.3.12 — follows the mode-row's new position. */
+    top: calc(var(--tg-safe-top) + 148px);
     /* CSS absolute positioning ignores the parent's padding — so we can't
        rely on #app's padding-bottom to push us above the bottom tabs. We
        explicitly subtract the tab height + safe-area-bottom here. */
@@ -196,22 +195,17 @@
   .next-pill canvas { display: block; }
 
   /* =========================================================
-     [05a] Booster row — horizontal strip BELOW the mode toggle
-     and ABOVE the canvas. All 4 boosters (Undo / Hammer / Shake
-     / Rainbow) live here in one line, equally spaced. Replaces
-     the old vertical right-side rail in v0.3.30.
+     [05a] Booster HUD — vertical strip of action buttons on the
+     right side of the jar. Each shows the count remaining, taps
+     to activate (or fire immediately for Shake). Subtle pulse
+     when active.
      ========================================================= */
-  .booster-row {
+  .booster-rail {
     position: absolute;
-    top: calc(var(--tg-safe-top) + 148px);
-    left: 8px; right: 8px;
     z-index: 22;
-    display: flex; align-items: center; justify-content: center;
-    gap: 12px;
+    display: flex; flex-direction: column;
+    gap: 8px;
   }
-  /* Legacy rail still selectable for the unused container in case any
-     extension code references it; just hidden in this version. */
-  .booster-rail { display: none; }
   .booster-btn {
     /* Size dropped 44 → 38 in v0.3.25 so the rail covers less of the jar
        on phones where the canvas fills the wrap width edge-to-edge.
@@ -1010,6 +1004,7 @@
       </div>
       <div class="ph-banner" id="ph-banner"><span class="em">⚡</span><span id="ph-text">POWER HOUR · 2×</span></div>
       <div class="right">
+        <button class="gear" id="btn-undo" title="Undo" style="display:none">↶</button>
         <button class="gear" id="btn-share" title="Share">📤</button>
         <button class="gear" id="btn-settings" title="Settings">⚙</button>
       </div>
@@ -1018,13 +1013,6 @@
     <div class="mode-row">
       <button class="mode-pill active" data-mode="endless"><span data-i18n="mode_endless">Endless</span></button>
       <button class="mode-pill" data-mode="daily">🌅 <span data-i18n="mode_daily">Daily</span></button>
-    </div>
-
-    <div class="booster-row" id="booster-row">
-      <button class="booster-btn" id="btn-undo" title="Undo">↶<span class="count" id="undo-count">0</span></button>
-      <button class="booster-btn" id="btn-hammer" title="Hammer">🔨<span class="count" id="hammer-count">0</span></button>
-      <button class="booster-btn" id="btn-shake" title="Shake">🌀<span class="count" id="shake-count">0</span></button>
-      <button class="booster-btn booster-rainbow" id="btn-rainbow" title="Rainbow Doll">🌈<span class="count" id="rainbow-count">0</span></button>
     </div>
 
     <div class="score-row">
@@ -1045,6 +1033,14 @@
       <div class="mascot-wrap" id="mascot-wrap">
         <div class="mascot-bubble" id="mascot-bubble"></div>
         <canvas id="mascot-canvas" width="68" height="80"></canvas>
+      </div>
+      <div class="booster-rail" id="booster-rail">
+        <button class="booster-btn" id="btn-hammer" title="Hammer"
+                aria-label="Hammer — tap a doll to remove it">🔨<span class="count" id="hammer-count">0</span></button>
+        <button class="booster-btn" id="btn-shake" title="Shake"
+                aria-label="Shake — jostles all dolls">🌀<span class="count" id="shake-count">0</span></button>
+        <button class="booster-btn booster-rainbow" id="btn-rainbow" title="Rainbow Doll"
+                aria-label="Rainbow Doll — next carrier merges with anything">🌈<span class="count" id="rainbow-count">0</span></button>
       </div>
       <div class="booster-cancel-hint" id="booster-hint" style="display:none">Tap a doll · tap again to cancel</div>
     </div>
@@ -3024,10 +3020,10 @@ function restoreSnapshot(snap) {
   renderNext();
 }
 function updateUndoButton() {
-  // Undo is now always visible in the booster row. The disabled style is
-  // driven by refreshBoosterHUD (which checks both the count and the
-  // snapshot). This function just kicks the HUD refresh.
-  refreshBoosterHUD();
+  const btn = document.getElementById('btn-undo');
+  if (!btn) return;
+  const canUndo = !!undoSnapshot && (state.undos || 0) > 0 && running;
+  btn.style.display = canUndo ? 'inline-flex' : 'none';
 }
 
 function doDrop() {
@@ -3053,11 +3049,7 @@ function doDrop() {
 
 function doUndo() {
   if (!undoSnapshot) { toast(t('no_undo')); return; }
-  if ((state.undos || 0) <= 0) {
-    if (typeof MX !== 'undefined') MX.track('Booster Tap Empty', { kind: 'undo' });
-    showBoosterPurchaseModal('undo');
-    return;
-  }
+  if ((state.undos || 0) <= 0) { toast(t('no_undos_left')); return; }
   state.undos--;
   restoreSnapshot(undoSnapshot);
   undoSnapshot = null;
@@ -3095,68 +3087,26 @@ let activeBooster = null;            // 'hammer' | null
 const hammerBtn = document.getElementById('btn-hammer');
 const shakeBtn  = document.getElementById('btn-shake');
 const rainbowBtn = document.getElementById('btn-rainbow');
-const undoBtn = document.getElementById('btn-undo');
 const boosterHint = document.getElementById('booster-hint');
 
 function refreshBoosterHUD() {
   const hc = document.getElementById('hammer-count');
   const sc = document.getElementById('shake-count');
   const rc = document.getElementById('rainbow-count');
-  const uc = document.getElementById('undo-count');
   const hams = state.hammers || 0;
   const shks = state.shakes  || 0;
   const rbs  = state.rainbows || 0;
-  const uds  = state.undos    || 0;
-  hc.textContent = hams; sc.textContent = shks; rc.textContent = rbs; uc.textContent = uds;
+  hc.textContent = hams; sc.textContent = shks; rc.textContent = rbs;
   hc.classList.toggle('zero', hams <= 0);
   sc.classList.toggle('zero', shks <= 0);
   rc.classList.toggle('zero', rbs <= 0);
-  uc.classList.toggle('zero', uds <= 0);
   hammerBtn.classList.toggle('disabled', hams <= 0);
   shakeBtn.classList.toggle('disabled',  shks <= 0);
   rainbowBtn.classList.toggle('disabled', rbs <= 0 && !pendingRainbow);
-  // Undo is special: also requires an undoSnapshot. Disabled style if
-  // either count is zero OR no snapshot exists.
-  undoBtn.classList.toggle('disabled', uds <= 0 || !undoSnapshot);
   hammerBtn.classList.toggle('active', activeBooster === 'hammer');
   rainbowBtn.classList.toggle('active', pendingRainbow);
   document.body.classList.toggle('booster-mode-active', activeBooster !== null);
   boosterHint.style.display = activeBooster === 'hammer' ? '' : 'none';
-}
-
-// Show a small Stars-purchase modal when the player taps an empty
-// booster. Two options: single-shot at single-pack price, or full
-// pack at pack price. Both go through the existing buySku flow.
-const BOOSTER_PURCHASE_CONFIG = {
-  hammer:  { icon: '🔨', name: 'Hammer',       single_sku: 'hammer_single',  single_price: 20,  pack_sku: 'hammer_pack',  pack_price: 80,  pack_qty: 5 },
-  shake:   { icon: '🌀', name: 'Shake',        single_sku: 'shake_single',   single_price: 15,  pack_sku: 'shake_pack',   pack_price: 60,  pack_qty: 5 },
-  rainbow: { icon: '🌈', name: 'Rainbow Doll', single_sku: 'rainbow_single', single_price: 45,  pack_sku: 'rainbow_pack', pack_price: 120, pack_qty: 3 },
-  undo:    { icon: '↶',  name: 'Undo',         single_sku: 'undo_single',    single_price: 15,  pack_sku: 'undo_pack',    pack_price: 60,  pack_qty: 5 },
-};
-function showBoosterPurchaseModal(kind) {
-  const cfg = BOOSTER_PURCHASE_CONFIG[kind];
-  if (!cfg) return;
-  if (typeof MX !== 'undefined' && MX.ready) MX.track('Booster Purchase Prompt', { kind });
-  const body = document.getElementById('modal-body');
-  body.innerHTML = `
-    <h3>${cfg.icon} Out of ${cfg.name}</h3>
-    <div class="sub">Grab one quick — or grab a pack and save.</div>
-    <div class="modal-btns">
-      <button class="btn" id="m-buy-single">
-        <span style="font-size:18px;margin-right:4px">${cfg.icon}</span>
-        Buy 1 · ${cfg.single_price} ⭐
-      </button>
-      <button class="btn" id="m-buy-pack">
-        <span style="font-size:18px;margin-right:4px">${cfg.icon}</span>
-        Buy ×${cfg.pack_qty} pack · ${cfg.pack_price} ⭐ <span style="opacity:0.6;font-size:11px">(save ${Math.round((1 - cfg.pack_price / (cfg.pack_qty * cfg.single_price)) * 100)}%)</span>
-      </button>
-      <button class="btn ghost" id="m-buy-cancel">Cancel</button>
-    </div>
-  `;
-  document.getElementById('modal-shade').classList.add('show');
-  document.getElementById('m-buy-single').onclick = () => { hideModal(); buySku(cfg.single_sku); };
-  document.getElementById('m-buy-pack').onclick = () => { hideModal(); buySku(cfg.pack_sku); };
-  document.getElementById('m-buy-cancel').onclick = hideModal;
 }
 
 function setActiveBooster(name) {
@@ -3166,8 +3116,8 @@ function setActiveBooster(name) {
 
 hammerBtn.addEventListener('click', () => {
   if ((state.hammers || 0) <= 0) {
+    toast('No hammers — buy in Shop');
     if (typeof MX !== 'undefined') MX.track('Booster Tap Empty', { kind: 'hammer' });
-    showBoosterPurchaseModal('hammer');
     return;
   }
   if (!running) return;
@@ -3177,8 +3127,8 @@ hammerBtn.addEventListener('click', () => {
 
 shakeBtn.addEventListener('click', () => {
   if ((state.shakes || 0) <= 0) {
+    toast('No shakes — buy in Shop');
     if (typeof MX !== 'undefined') MX.track('Booster Tap Empty', { kind: 'shake' });
-    showBoosterPurchaseModal('shake');
     return;
   }
   if (!running) return;
@@ -3203,8 +3153,7 @@ rainbowBtn.addEventListener('click', () => {
     return;
   }
   if ((state.rainbows || 0) <= 0) {
-    if (typeof MX !== 'undefined') MX.track('Booster Tap Empty', { kind: 'rainbow' });
-    showBoosterPurchaseModal('rainbow');
+    toast('No rainbow dolls — buy in Shop');
     return;
   }
   state.rainbows--;
@@ -5126,9 +5075,21 @@ function fitCanvas() {
     mascotBubble.style.left = '46px';
     mascotBubble.style.bottom = '78px';
   }
-  // Booster row is now CSS-positioned (top: safe-top + 148px), no JS
-  // positioning needed. v0.3.30 retired the vertical rail.
-  // Cancel hint: just above the canvas top
+  // Booster rail: pinned to the wrap's right edge (i.e., the viewport
+  // right edge — the wrap is left:0 right:0). The 2px offset keeps the
+  // rail from kissing the device bezel on no-margin phones. v0.3.25:
+  // was anchored 4px to the LEFT of canvas right, which covered ~50px
+  // of the playable jar area when canvas filled the wrap width on
+  // phones. Now buttons hug the very right edge of the screen, only
+  // overhanging the jar by the button width (38px) — and since the
+  // jar's right wall is at logical x=346 of a 360-wide canvas, the
+  // play area lost is just the ~14px right margin of the jar.
+  const rail = document.getElementById('booster-rail');
+  if (rail) {
+    rail.style.right = '2px';
+    rail.style.top = (canvasRect.top - rect.top + (canvasRect.height - rail.offsetHeight) / 2) + 'px';
+  }
+  // Cancel hint: just above the booster rail
   const hint = document.getElementById('booster-hint');
   if (hint) {
     hint.style.top = (canvasRect.top - rect.top + 8) + 'px';

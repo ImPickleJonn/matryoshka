@@ -415,6 +415,29 @@ const SKUS = {
     description: 'A magical doll that merges with ANY size — instant level up.',
     price: 120, priceUsd: '$1.59', grant: { rainbows: 3 },
   },
+  // Single-shot convenience packs — surfaced via the "out of charges"
+  // popup when a player taps an empty booster button mid-game. Slight
+  // per-unit premium vs the multi-packs to nudge bigger purchases.
+  hammer_single: {
+    id: 'hammer_single', title: 'Hammer · ×1',
+    description: 'One hammer — tap any doll to remove it.',
+    price: 20, priceUsd: '$0.25', grant: { hammers: 1 },
+  },
+  shake_single: {
+    id: 'shake_single', title: 'Shake · ×1',
+    description: 'One shake — jostle every doll in the jar.',
+    price: 15, priceUsd: '$0.19', grant: { shakes: 1 },
+  },
+  rainbow_single: {
+    id: 'rainbow_single', title: 'Rainbow Doll · ×1',
+    description: 'One rainbow — merges with any size.',
+    price: 45, priceUsd: '$0.59', grant: { rainbows: 1 },
+  },
+  undo_single: {
+    id: 'undo_single', title: 'Undo · ×1',
+    description: 'One undo — take back your last drop.',
+    price: 15, priceUsd: '$0.19', grant: { undos: 1 },
+  },
   booster_bundle: {
     id: 'booster_bundle', title: 'Booster Bundle · Best Value',
     description: '5 hammers + 5 shakes + 2 rainbows + 5 undos + 2 revives.',
