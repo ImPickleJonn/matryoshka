@@ -26,7 +26,11 @@
     --warn: #e76f51;
     --pill: rgba(255, 255, 255, 0.16);
     --pill-strong: rgba(255, 255, 255, 0.28);
-    --tab-h: 66px;
+    /* Tab bar height — reduced from 66px to 52px in v0.3.11 because the
+       old chunky tabs ate 12-15% of vertical screen space on flagship
+       phones and pushed the jar visually higher than it needed to be.
+       52 still fits a 20px emoji + 10px label comfortably. */
+    --tab-h: 52px;
     --tg-safe-top: 0px;
     --tg-safe-bottom: 0px;
   }
@@ -58,7 +62,12 @@
      [02] Header HUD
      ========================================================= */
   .topbar {
-    position: absolute; top: calc(var(--tg-safe-top) + 6px); left: 8px; right: 8px;
+    /* Offset bumped 6 → 14 in v0.3.12 to add extra buffer below the
+       Telegram chrome bottom edge. Combined with the 140px safe-top
+       floor in applySafeArea(), the topbar sits at minimum y=154 from
+       viewport top — comfortably below the X Close button on iPhone
+       14/15 Pro with Dynamic Island. */
+    position: absolute; top: calc(var(--tg-safe-top) + 14px); left: 8px; right: 8px;
     display: flex; align-items: center; justify-content: space-between;
     z-index: 30;
   }
@@ -89,7 +98,10 @@
      [03] Score banner
      ========================================================= */
   .score-row {
-    position: absolute; top: calc(var(--tg-safe-top) + 50px);
+    /* v0.3.39 — moved BELOW the season strip and right next to the
+       canvas (was at safe-top+62 above the strip). Order is now
+       topbar → season-strip → score-row → canvas. */
+    position: absolute; top: calc(var(--tg-safe-top) + 102px);
     left: 0; right: 0;
     display: flex; align-items: center; justify-content: center;
     gap: 18px;
@@ -121,7 +133,11 @@
      [03b] Mode toggle (Endless / Daily)
      ========================================================= */
   .mode-row {
-    position: absolute; top: calc(var(--tg-safe-top) + 102px);
+    /* v0.3.38 — DAILY mode hidden; only ENDLESS is supported for now.
+       Code paths preserved so we can re-enable later by dropping the
+       display:none below. */
+    display: none !important;
+    position: absolute; top: calc(var(--tg-safe-top) + 116px);
     left: 0; right: 0;
     display: flex; justify-content: center; gap: 4px;
     z-index: 24; pointer-events: auto;
@@ -148,8 +164,18 @@
      ========================================================= */
   #canvas-wrap {
     position: absolute;
-    top: calc(var(--tg-safe-top) + 132px);
-    bottom: 0; left: 0; right: 0;
+    /* v0.3.39 — top tightened 188 → 156 because:
+         - safe-top floor dropped 140 → 110 (-30 saved)
+         - score-row moved BELOW the season strip and right next to
+           the canvas (lots of vertical space reclaimed)
+         - daily mode-row gone (was at safe-top+116)
+       Net: ~62px less padding above the jar. */
+    top: calc(var(--tg-safe-top) + 156px);
+    /* CSS absolute positioning ignores the parent's padding — so we can't
+       rely on #app's padding-bottom to push us above the bottom tabs. We
+       explicitly subtract the tab height + safe-area-bottom here. */
+    bottom: calc(var(--tg-safe-bottom) + var(--tab-h));
+    left: 0; right: 0;
     display: flex; justify-content: center; align-items: flex-start;
   }
   #game {
@@ -178,9 +204,108 @@
   .next-pill canvas { display: block; }
 
   /* =========================================================
+     [05a] Booster rail — vertical column on the right side of the
+     jar containing all four boosters (Undo / Hammer / Shake /
+     Rainbow). Pinned to right: 2px (viewport edge) by fitCanvas.
+     Player request v0.3.31: revert from the brief horizontal-row
+     layout back to this vertical stack.
+     ========================================================= */
+  .booster-rail {
+    position: absolute;
+    z-index: 22;
+    display: flex; flex-direction: column;
+    gap: 6px;
+  }
+  .booster-btn {
+    /* Size dropped 44 → 38 in v0.3.25 so the rail covers less of the jar
+       on phones where the canvas fills the wrap width edge-to-edge.
+       Still well above the 32px minimum-tap-target rule of thumb. */
+    width: 38px; height: 38px;
+    border-radius: 12px;
+    background: linear-gradient(180deg, #fff 0%, #fce6c2 100%);
+    border: 1.5px solid #e7b53b;
+    box-shadow: 0 3px 6px rgba(118,72,28,0.18);
+    color: var(--ink);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    cursor: pointer;
+    position: relative;
+    transition: transform 0.12s ease;
+  }
+  .booster-btn:active { transform: scale(0.92); }
+  .booster-btn.disabled {
+    /* Stronger disabled visual in v0.3.32 so players don't think a
+       disabled button is tappable. Combined with a clearer toast when
+       they DO tap (e.g., "Drop a doll first to enable undo"). */
+    opacity: 0.42;
+    filter: grayscale(0.7);
+    background: linear-gradient(180deg, #f6e8c8 0%, #e7d3a8 100%);
+    border-color: #c8a865;
+    box-shadow: none;
+  }
+  .booster-btn.disabled .count {
+    background: #8a7a5e;
+    color: rgba(255,255,255,0.85);
+  }
+  .booster-btn .count {
+    position: absolute;
+    /* Slightly tighter than the old (-3, -3) so the badge doesn't add
+       extra visual footprint past the button edge. */
+    bottom: -2px; right: -2px;
+    background: var(--ink); color: #fff;
+    font-size: 9px; font-weight: 800;
+    border-radius: 999px;
+    min-width: 15px; height: 15px;
+    padding: 0 3px;
+    display: inline-flex; align-items: center; justify-content: center;
+    line-height: 1;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  }
+  .booster-btn .count.zero { background: #c47b6a; }
+  .booster-btn.active {
+    background: linear-gradient(180deg, #fff5d2 0%, #ffd84d 100%);
+    border-color: var(--gold-deep);
+    box-shadow: 0 0 0 3px rgba(253,197,0,0.45), 0 3px 6px rgba(118,72,28,0.18);
+    animation: booster-pulse 0.9s ease-in-out infinite;
+  }
+  /* Rainbow button shimmers regardless of active state — it's special. */
+  .booster-rainbow {
+    background: linear-gradient(135deg, #ff2e63 0%, #ff8c00 25%, #ffd400 50%, #39ff14 70%, #00bbf9 90%, #9b5de5 100%) !important;
+    background-size: 220% 220% !important;
+    border-color: #fff !important;
+    animation: rainbow-shimmer 2.4s linear infinite;
+  }
+  @keyframes rainbow-shimmer {
+    0%   { background-position:   0% 50%; }
+    100% { background-position: 220% 50%; }
+  }
+  .booster-rainbow.disabled { animation: none; opacity: 0.55; }
+  @keyframes booster-pulse {
+    0%, 100% { box-shadow: 0 0 0 3px rgba(253,197,0,0.45), 0 3px 6px rgba(118,72,28,0.18); }
+    50%      { box-shadow: 0 0 0 6px rgba(253,197,0,0.20), 0 3px 6px rgba(118,72,28,0.18); }
+  }
+  /* When a booster is in "tap a doll" mode, hint with a target reticle
+     cursor over the canvas. */
+  .booster-mode-active #game { cursor: crosshair; }
+  .booster-cancel-hint {
+    position: absolute;
+    z-index: 23;
+    background: rgba(0,0,0,0.78);
+    color: #fff; font-size: 11px; font-weight: 700;
+    padding: 4px 10px; border-radius: 999px;
+    pointer-events: none;
+    letter-spacing: 0.5px;
+  }
+
+  /* =========================================================
      [05b] Mascot — corner reactive doll
      ========================================================= */
   .mascot-wrap {
+    /* Hidden in v0.3.2 — the Grandma mascot uses the same matryoshka art
+       as playable dolls, so players were trying to merge with it. Will
+       revive later as a visually-distinct character (samovar, cat, etc.)
+       that's clearly a spectator, not a piece. */
+    display: none !important;
     position: absolute;
     z-index: 16;
     pointer-events: none;
@@ -213,8 +338,14 @@
      [06] Tiers progress dock (bottom of jar)
      ========================================================= */
   .tiers-dock {
+    /* Hidden in v0.3.2 — players didn't recognize the dots as a tier-
+       progression indicator. The next-doll pill + the actual dolls in the
+       jar already convey progress more naturally. Keeping the markup and
+       JS in place so we can revive it as a Stats-panel widget later. */
+    display: none !important;
     position: absolute; z-index: 18;
-    display: flex; gap: 3px;
+    /* (original was display: flex; gap: 3px) */
+    gap: 3px;
     padding: 5px 8px;
     background: rgba(0,0,0,0.18);
     border-radius: 12px;
@@ -253,14 +384,14 @@
   .tab-btn {
     flex: 1; display: flex; flex-direction: column;
     align-items: center; justify-content: center;
-    gap: 2px;
+    gap: 1px;
     border: none; background: transparent;
-    color: #93644f; font-size: 11px; font-weight: 700;
+    color: #93644f; font-size: 10px; font-weight: 700;
     cursor: pointer;
     letter-spacing: 0.5px;
     transition: color 0.15s ease;
   }
-  .tab-btn .em { font-size: 22px; line-height: 1; }
+  .tab-btn .em { font-size: 20px; line-height: 1; }
   .tab-btn.active { color: #a51d30; }
   .tab-btn.active .em { transform: scale(1.1); }
 
@@ -321,6 +452,75 @@
   }
   .sku-buy:active { transform: translateY(1px); }
   .sku-buy .star { color: #b88317; }
+
+  /* =========================================================
+     [08b] Shop admin toggle — only visible to allow-listed admins.
+     Sits at the very top of the Shop panel. Lets the admin flip
+     between 1⭐ test pricing (to validate the invoice / payment /
+     grant flow cheaply) and real prices (to see what players see).
+     ========================================================= */
+  .admin-toggle-bar {
+    display: none;
+    background: linear-gradient(180deg, #2b0a10 0%, #4a0a1c 100%);
+    color: #fff;
+    border: 1.5px solid #fdc500;
+    border-radius: 14px;
+    padding: 10px 12px;
+    margin-bottom: 14px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+  }
+  .admin-toggle-bar.show { display: block; }
+  .admin-toggle-title {
+    font-size: 11px; font-weight: 800;
+    letter-spacing: 1.5px; opacity: 0.85;
+    margin-bottom: 8px;
+    color: #fdc500;
+  }
+  .admin-toggle-row { display: flex; gap: 6px; }
+  .admin-toggle-btn {
+    flex: 1;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,213,122,0.4);
+    color: #ffe6c2;
+    font-size: 12px; font-weight: 800;
+    padding: 8px 4px; border-radius: 10px;
+    cursor: pointer; letter-spacing: 0.5px;
+  }
+  .admin-toggle-btn.active {
+    background: linear-gradient(180deg, #ffd84d 0%, #f5b300 100%);
+    color: #2b0a10;
+    border-color: #f5b300;
+    box-shadow: 0 2px 6px rgba(253,197,0,0.35);
+  }
+  .sku-card .sku-buy.admin-price { background: linear-gradient(180deg, #ff8c00 0%, #f72585 100%); color: #fff; }
+  .sku-card .sku-buy.admin-price .star { color: #fff5d2; }
+
+  /* =========================================================
+     [08c] Gem shop — secondary section below the Stars SKUs in
+     the Shop tab. Players spend earned gems on single-shot
+     boosters at 10× the Stars rate.
+     ========================================================= */
+  .gem-shop-header {
+    margin: 24px 0 12px;
+    padding-top: 16px;
+    border-top: 2px dashed #ecd9a8;
+  }
+  .gem-shop-header h2 {
+    text-align: center; font-size: 22px;
+    color: var(--ink); font-weight: 800;
+    margin: 0 0 4px;
+  }
+  .sku-card.gem-card .sku-buy.gem-buy {
+    background: linear-gradient(180deg, #6fd8c0 0%, #2a9d8f 100%);
+    color: #fff;
+    box-shadow: 0 2px 5px rgba(42,157,143,0.35);
+  }
+  .sku-card.gem-card .sku-buy.gem-buy .gem { color: #fff5d2; }
+  .sku-card.gem-card .sku-buy.gem-buy.disabled {
+    background: #cdd5d7; color: rgba(255,255,255,0.85);
+    box-shadow: none; cursor: not-allowed;
+  }
+  .sku-card.gem-card.not-enough { opacity: 0.82; }
 
   /* =========================================================
      [09] Earn tab
@@ -394,6 +594,340 @@
   @keyframes claim-pulse {
     0%, 100% { transform: scale(1); }
     50% { transform: scale(1.06); }
+  }
+
+  /* =========================================================
+     [09z] Season Pass v0.3.35 — moved to a full-screen modal,
+     opened from a thin progress strip on the Play screen. The
+     20-step track is now TWO VERTICAL LANES side-by-side (Free
+     left, ★ Premium right) with steps stacked top-to-bottom.
+     ========================================================= */
+  /* Play-screen Season Pass strip — v0.3.39 chunky redesign:
+        - moved ABOVE the score row (was below the now-hidden mode-row)
+        - taller (44px) so it reads as a real HUD element, not a thin pill
+        - the entire pill IS the progress bar (fill underneath, text +
+          reward overlaid on top via absolute positioning)
+        - "1,234 / 1,900" points text CENTERED INSIDE the bar
+        - reward chip at the right end is larger + bolder
+        - premium variant: gold border + glow halo + star prefix +
+          premium-gradient fill + gold reward chip (rules unchanged) */
+  .season-strip {
+    position: absolute;
+    top: calc(var(--tg-safe-top) + 50px);
+    left: 8px; right: 8px;
+    z-index: 24;
+    height: 44px;
+    background: rgba(0,0,0,0.22);
+    border: 2px solid rgba(255,213,122,0.55);
+    border-radius: 14px;
+    overflow: hidden;
+    color: #fff;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: box-shadow 0.3s ease, border-color 0.3s ease, background 0.3s ease;
+    padding: 0;
+    display: block;
+  }
+  .season-strip:active { transform: scale(0.98); }
+  .season-strip-label {
+    position: absolute;
+    left: 10px; top: 50%; transform: translateY(-50%);
+    z-index: 3;
+    display: flex; align-items: center; gap: 2px;
+    font-size: 16px;
+    pointer-events: none;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+  }
+  .season-strip-star {
+    display: none;
+    font-size: 14px;
+    color: #fdc500;
+    text-shadow: 0 0 6px rgba(0,0,0,0.7);
+  }
+  .season-strip-fill {
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 0%;
+    background: linear-gradient(90deg, #ffd84d 0%, #f5b300 50%, #e76f51 100%);
+    transition: width 0.55s cubic-bezier(.34, 1.56, .64, 1);
+    z-index: 1;
+  }
+  .season-strip-pts {
+    position: absolute;
+    inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    color: #fff;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.75), 0 0 2px rgba(0,0,0,0.6);
+    letter-spacing: 0.3px;
+    z-index: 3;
+    pointer-events: none;
+    padding: 0 80px 0 42px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .season-strip-next-reward {
+    position: absolute;
+    right: 6px; top: 50%; transform: translateY(-50%);
+    z-index: 4;
+    background: rgba(0,0,0,0.7);
+    color: #fff;
+    font-size: 13px; font-weight: 800;
+    padding: 4px 9px;
+    border-radius: 999px;
+    border: 1.5px solid rgba(255,255,255,0.45);
+    line-height: 1.1;
+    pointer-events: none;
+    white-space: nowrap;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.45);
+  }
+  /* PREMIUM variant — gold star prefix, glowing border, premium-gradient bar */
+  .season-strip.premium {
+    border-color: #fdc500;
+    background: linear-gradient(135deg, rgba(108,46,181,0.55) 0%, rgba(247,37,133,0.35) 50%, rgba(0,0,0,0.25) 100%);
+    box-shadow: 0 0 14px rgba(253,197,0,0.55), inset 0 0 8px rgba(253,197,0,0.18);
+    animation: season-strip-glow 2.4s ease-in-out infinite;
+  }
+  @keyframes season-strip-glow {
+    0%, 100% { box-shadow: 0 0 10px rgba(253,197,0,0.4), inset 0 0 6px rgba(253,197,0,0.15); }
+    50%      { box-shadow: 0 0 18px rgba(253,197,0,0.75), inset 0 0 10px rgba(253,197,0,0.25); }
+  }
+  .season-strip.premium .season-strip-star { display: inline-flex; }
+  .season-strip.premium .season-strip-fill {
+    background: linear-gradient(90deg, #fdc500 0%, #f72585 50%, #9b5de5 100%);
+  }
+  .season-strip.premium .season-strip-next-reward {
+    background: linear-gradient(135deg, #fdc500 0%, #f5b300 100%);
+    color: #2b0a10;
+    border-color: #fff5d2;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  }
+
+  /* Full-screen Season Pass modal */
+  .season-shade {
+    position: fixed; inset: 0;
+    background: rgba(20, 4, 8, 0.78);
+    backdrop-filter: blur(3px);
+    display: none; align-items: stretch; justify-content: center;
+    z-index: 95;
+  }
+  .season-shade.show { display: flex; animation: shade-in 0.18s ease; }
+  .season-modal {
+    background: linear-gradient(180deg, var(--paper) 0%, #fdf3df 100%);
+    width: 100%; max-width: 480px;
+    margin: calc(var(--tg-safe-top) + 12px) 8px calc(var(--tg-safe-bottom) + 12px);
+    border-radius: 18px;
+    border: 2px solid var(--gold);
+    box-shadow: 0 18px 48px rgba(0,0,0,0.5);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    animation: modal-in 0.24s cubic-bezier(.34, 1.56, .64, 1);
+  }
+  .season-modal-header {
+    display: flex; align-items: center;
+    padding: 12px 14px 8px;
+    border-bottom: 1px solid #ecd9a8;
+  }
+  .season-modal-header h2 {
+    margin: 0; font-size: 18px; font-weight: 800;
+    color: var(--ink);
+    flex: 1;
+    display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+  }
+  .season-modal-close {
+    background: transparent; border: none;
+    font-size: 28px; line-height: 1;
+    color: var(--ink-soft); cursor: pointer;
+    padding: 0 4px;
+    font-weight: 600;
+  }
+  .season-modal-body {
+    flex: 1; overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 12px 14px 18px;
+  }
+  .season-countdown {
+    font-size: 11px; font-weight: 700;
+    color: var(--ink-soft);
+    background: #fff5d2; border-radius: 8px;
+    padding: 2px 7px;
+    border: 1px solid #f5d77a;
+  }
+  .season-progress-shell {
+    height: 12px; background: #f3e8c8;
+    border-radius: 999px; overflow: hidden;
+    margin: 8px 0 4px;
+    border: 1px solid #ecd9a8;
+  }
+  .season-progress-bar {
+    height: 100%; width: 0%;
+    background: linear-gradient(90deg, #ffd84d 0%, #f5b300 50%, #e76f51 100%);
+    border-radius: 999px;
+    transition: width 0.4s ease;
+  }
+  .season-progress-text {
+    display: flex; justify-content: space-between;
+    font-size: 12px; font-weight: 700; color: var(--ink-soft);
+    margin-bottom: 12px;
+  }
+  .season-premium-cta {
+    display: flex; align-items: center; gap: 10px;
+    background: linear-gradient(135deg, #6c2eb5 0%, #9b5de5 100%);
+    color: #fff;
+    border-radius: 12px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    box-shadow: 0 4px 12px rgba(108,46,181,0.3);
+  }
+  .season-premium-text { flex: 1; min-width: 0; }
+  .season-premium-text strong { font-size: 14px; }
+  .season-premium-text span { font-size: 11px; opacity: 0.92; }
+  .season-buy-btn {
+    flex-shrink: 0;
+    background: linear-gradient(180deg, #ffd84d 0%, #f5b300 100%);
+    color: #2b0a10; font-weight: 800;
+    padding: 8px 14px; font-size: 13px;
+    border: none; border-radius: 10px;
+    cursor: pointer;
+  }
+  .season-buy-btn:active { transform: translateY(1px); }
+  /* Header above the rows showing the two lane columns */
+  .season-rows-header {
+    display: grid;
+    grid-template-columns: 56px 1fr 1fr;
+    gap: 8px;
+    padding: 0 4px 6px;
+    position: sticky; top: 0;
+    background: linear-gradient(180deg, var(--paper) 0%, #fdf3df 100%);
+    z-index: 2;
+  }
+  .lane-col-label {
+    font-size: 11px; font-weight: 800;
+    letter-spacing: 1px;
+    text-align: center;
+    padding: 6px 0;
+    border-radius: 8px;
+  }
+  .free-col-label { background: #fbf6ee; color: #93644f; border: 1px solid #ecd9a8; }
+  .pro-col-label  { background: linear-gradient(135deg, #6c2eb5 0%, #9b5de5 100%); color: #fff; }
+  /* Row: step info column + free lane + premium lane, side by side */
+  .season-rows {
+    display: flex; flex-direction: column;
+    gap: 6px;
+  }
+  .season-row {
+    display: grid;
+    grid-template-columns: 56px 1fr 1fr;
+    gap: 8px;
+    align-items: stretch;
+  }
+  .season-row.reached .step-info { background: linear-gradient(135deg, #fff5d2 0%, #ffe9a0 100%); border-color: var(--gold); }
+  .step-info {
+    background: #fbf6ee;
+    border: 1.5px solid #ecd9a8;
+    border-radius: 10px;
+    padding: 8px 4px;
+    text-align: center;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 2px;
+  }
+  .step-num {
+    font-size: 10px; font-weight: 800;
+    color: var(--ink-soft); letter-spacing: 0.5px;
+  }
+  .step-threshold {
+    font-size: 13px; font-weight: 800;
+    color: var(--ink);
+    line-height: 1;
+  }
+  .lane {
+    background: #fbf6ee;
+    border: 1.5px solid #ecd9a8;
+    border-radius: 10px;
+    padding: 8px 6px;
+    cursor: default;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 4px;
+    min-height: 56px;
+  }
+  .lane-reward {
+    font-size: 14px; font-weight: 800;
+    color: var(--ink);
+    line-height: 1.1;
+  }
+  .lane-action {
+    font-size: 11px; color: var(--ink-soft);
+    height: 18px; line-height: 1;
+    display: flex; align-items: center;
+  }
+  .lane-claim-tag {
+    background: var(--ok); color: #fff;
+    font-size: 9px; font-weight: 800;
+    padding: 2px 5px; border-radius: 6px;
+    letter-spacing: 0.5px;
+  }
+  .lane.locked { opacity: 0.55; }
+  .lane.claimable {
+    background: linear-gradient(135deg, #fff5d2 0%, #ffe9a0 100%);
+    border-color: var(--gold);
+    cursor: pointer;
+    animation: lane-pulse 1.6s ease-in-out infinite;
+  }
+  .lane.claimable:active { transform: scale(0.97); }
+  @keyframes lane-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(245,179,0,0.5); }
+    50%      { box-shadow: 0 0 0 4px rgba(245,179,0,0.0); }
+  }
+  .lane.claimed {
+    background: #e7f6f2;
+    border-color: #4ad3ad;
+    opacity: 0.7;
+  }
+  .lane.claimed .lane-action { color: var(--ok); font-size: 16px; font-weight: 800; }
+  .lane-premium.no-premium { background: rgba(108,46,181,0.06); cursor: pointer; }
+  .lane-premium.no-premium:active { background: rgba(108,46,181,0.12); }
+
+  /* =========================================================
+     [09a] Wheel of Fortune (Earn tab)
+     ========================================================= */
+  .spin-stage {
+    position: relative;
+    display: flex; flex-direction: column;
+    align-items: center;
+    padding: 6px 0 8px;
+  }
+  .spin-pointer {
+    position: absolute; top: -2px; left: 50%;
+    transform: translateX(-50%);
+    color: var(--ink);
+    font-size: 22px; line-height: 1;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.25);
+    z-index: 2;
+  }
+  #spin-canvas { display: block; max-width: 92%; height: auto; }
+  .spin-btn {
+    width: 100%;
+    margin-top: 8px;
+    background: linear-gradient(180deg, #4ad3ad 0%, #2a9d8f 100%);
+    color: #fff; font-weight: 800; border: none;
+    border-radius: 10px; padding: 12px 0;
+    font-size: 15px; cursor: pointer;
+    box-shadow: 0 2px 5px rgba(42,157,143,0.4);
+  }
+  .spin-btn:disabled {
+    background: #cdd5d7; cursor: not-allowed;
+    box-shadow: none;
+  }
+  .spin-btn:active:not(:disabled) { transform: translateY(1px); }
+  .spin-status {
+    font-size: 11px; font-weight: 700;
+    color: var(--ink-soft);
+    background: #fbf6ee; border-radius: 8px;
+    padding: 2px 7px; margin-left: auto;
+    border: 1px solid #ecd9a8;
   }
 
   /* =========================================================
@@ -480,6 +1014,25 @@
   .skin-tile.locked { opacity: 0.55; }
   .skin-tile .em { font-size: 22px; }
 
+  /* Language picker tiles inside settings modal — 4 columns × 5 rows */
+  .lang-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 5px; margin: 6px 0 10px;
+    max-height: 260px; overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .lang-tile {
+    background: var(--paper); border: 1.5px solid #ecd9a8;
+    border-radius: 8px; padding: 6px 2px;
+    font-size: 10px; font-weight: 700; color: var(--ink-soft);
+    cursor: pointer; text-align: center;
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    line-height: 1.15;
+  }
+  .lang-tile.active { border-color: var(--gold-deep); background: #fff5d2; color: var(--ink); border-width: 2px; }
+  .lang-tile .flag { font-size: 18px; line-height: 1; }
+  .lang-tile .name { font-size: 9px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
   /* =========================================================
      [10] Modal
      ========================================================= */
@@ -554,6 +1107,71 @@
   .lb-score { font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
 
   /* =========================================================
+     [10b] Season Pass snapshot — inside the game-over modal,
+     animates the progress bar from points-before to points-after
+     with ticking SFX. Tap = open full Season modal layered on top.
+     ========================================================= */
+  .season-snapshot {
+    margin-top: 16px;
+    padding: 12px;
+    background: linear-gradient(180deg, #fff8e2 0%, #f5e2b3 100%);
+    border: 1.5px solid #f5d77a;
+    border-radius: 12px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 0.12s ease;
+  }
+  .season-snapshot:active { transform: scale(0.98); }
+  .snapshot-header {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 13px; font-weight: 800;
+    color: var(--ink);
+    margin-bottom: 8px;
+  }
+  .snapshot-delta {
+    background: linear-gradient(180deg, #4ad3ad 0%, #2a9d8f 100%);
+    color: #fff;
+    font-size: 12px; font-weight: 800;
+    padding: 2px 8px; border-radius: 999px;
+    box-shadow: 0 2px 4px rgba(42,157,143,0.3);
+  }
+  .snapshot-delta.zero {
+    background: #cdd5d7;
+    box-shadow: none;
+  }
+  .snapshot-bar-shell {
+    height: 14px;
+    background: rgba(118,72,28,0.18);
+    border-radius: 999px;
+    overflow: hidden;
+    border: 1px solid #e7b53b;
+    margin-bottom: 6px;
+    position: relative;
+  }
+  .snapshot-bar-fill {
+    height: 100%; width: 0%;
+    background: linear-gradient(90deg, #ffd84d 0%, #f5b300 50%, #e76f51 100%);
+    border-radius: 999px;
+    transition: none; /* JS-driven animation, not CSS */
+  }
+  .snapshot-text {
+    font-size: 11px; color: var(--ink-soft); font-weight: 700;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+  .snapshot-claim-row {
+    margin-top: 8px;
+    padding: 6px 10px;
+    background: linear-gradient(135deg, #fdc500 0%, #f5b300 100%);
+    color: var(--ink);
+    border-radius: 10px;
+    font-size: 12px; font-weight: 800;
+    display: flex; justify-content: space-between; align-items: center;
+    animation: claim-pulse 1.4s ease infinite;
+  }
+  .snapshot-claim-row .arrow { font-size: 14px; }
+
+  /* =========================================================
      [11a] Splash screen — brand intro on first load
      ========================================================= */
   .splash {
@@ -596,19 +1214,20 @@
   }
 
   /* =========================================================
-     [11ab] Power Hour banner
+     [11ab] Power Hour banner — sits inside .topbar's flex layout
+     between the left pills and the right gears so it never
+     overlaps the streak pill.
      ========================================================= */
   .ph-banner {
-    position: absolute; top: calc(var(--tg-safe-top) + 6px);
-    left: 50%; transform: translateX(-50%);
     display: none;
     background: linear-gradient(90deg, #f72585 0%, #ff8c00 100%);
     color: #fff; font-weight: 800;
     border-radius: 999px;
-    padding: 5px 12px;
+    padding: 5px 10px;
     font-size: 11px; letter-spacing: 0.5px;
     box-shadow: 0 3px 8px rgba(247,37,133,0.4);
-    z-index: 28;
+    max-width: 180px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     animation: ph-pulse 1.6s ease-in-out infinite;
   }
   .ph-banner.show { display: inline-flex; align-items: center; gap: 6px; }
@@ -730,17 +1349,44 @@
   /* =========================================================
      [12] Toast
      ========================================================= */
+  /* Toast — moved to TOP in v0.3.5 because it used to land right under
+     the player's thumb at the bottom of the screen, making "+30 💎" type
+     feedback invisible. Now it pops down from above the topbar with a
+     bouncier entrance and gold styling so it reads as a reward, not
+     just info. */
   #toast {
-    position: fixed; left: 50%; transform: translateX(-50%);
-    bottom: calc(var(--tab-h) + var(--tg-safe-bottom) + 22px);
-    background: rgba(0,0,0,0.82); color: #fff;
-    padding: 9px 14px; border-radius: 20px;
-    font-size: 13px; font-weight: 700;
-    z-index: 200; pointer-events: none;
-    opacity: 0; transition: opacity 0.2s ease, transform 0.2s ease;
-    max-width: 80vw;
+    position: fixed; left: 50%;
+    top: calc(var(--tg-safe-top) + 56px);
+    background: linear-gradient(180deg, #ffd84d 0%, #f5b300 100%);
+    color: #2b0a10;
+    border: 2px solid #b88317;
+    padding: 11px 18px; border-radius: 14px;
+    font-size: 15px; font-weight: 800;
+    z-index: 250; pointer-events: none;
+    opacity: 0;
+    transform: translateX(-50%) translateY(-12px);
+    transition: opacity 0.22s ease, transform 0.22s cubic-bezier(.34, 1.56, .64, 1);
+    max-width: 85vw;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+    white-space: nowrap;
+    text-align: center;
   }
-  #toast.show { opacity: 1; transform: translateX(-50%) translateY(-4px); }
+  #toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  /* Gem pill pulse — animates briefly when the gem count changes so the
+     player gets direct feedback at the source even if they happen to be
+     on the Earn tab (where the topbar isn't visible). */
+  @keyframes pill-pulse {
+    0%   { transform: scale(1); }
+    30%  { transform: scale(1.18); }
+    60%  { transform: scale(0.97); }
+    100% { transform: scale(1); }
+  }
+  .pill.pulse { animation: pill-pulse 0.55s ease; }
+  .pill.pulse-up { background: var(--gold); color: var(--ink); }
 </style>
 </head>
 <body>
@@ -753,9 +1399,6 @@
   <div class="splash-bar"><div class="splash-bar-fill"></div></div>
 </div>
 
-<!-- ===================== POWER HOUR BANNER ===================== -->
-<div class="ph-banner" id="ph-banner"><span class="em">⚡</span><span id="ph-text">POWER HOUR · 2× rewards</span></div>
-
 <div id="app">
 
   <!-- ===================== HOME TAB ===================== -->
@@ -765,8 +1408,9 @@
         <div class="pill" id="gems-pill"><span class="em">💎</span><span class="num" id="gems-count">0</span></div>
         <div class="pill" id="streak-pill"><span class="em">🔥</span><span class="num" id="streak-count">0</span></div>
       </div>
+      <div class="ph-banner" id="ph-banner"><span class="em">⚡</span><span id="ph-text">POWER HOUR · 2×</span></div>
       <div class="right">
-        <button class="gear" id="btn-undo" title="Undo" style="display:none">↶</button>
+        <button class="gear" id="btn-share" title="Share">📤</button>
         <button class="gear" id="btn-settings" title="Settings">⚙</button>
       </div>
     </div>
@@ -775,6 +1419,14 @@
       <button class="mode-pill active" data-mode="endless"><span data-i18n="mode_endless">Endless</span></button>
       <button class="mode-pill" data-mode="daily">🌅 <span data-i18n="mode_daily">Daily</span></button>
     </div>
+
+    <button class="season-strip" id="season-strip">
+      <div class="season-strip-fill" id="season-strip-fill"></div>
+      <div class="season-strip-label"><span class="season-strip-star" id="season-strip-star">★</span>🎟</div>
+      <div class="season-strip-pts" id="season-strip-pts">0 / 100</div>
+      <div class="season-strip-next-reward" id="season-strip-next-reward"></div>
+    </button>
+
 
     <div class="score-row">
       <div class="score-side"><div class="num" id="best-score">0</div><div class="lbl" data-i18n="best">Best</div></div>
@@ -795,6 +1447,13 @@
         <div class="mascot-bubble" id="mascot-bubble"></div>
         <canvas id="mascot-canvas" width="68" height="80"></canvas>
       </div>
+      <div class="booster-rail" id="booster-rail">
+        <button class="booster-btn" id="btn-undo" title="Undo">↶<span class="count" id="undo-count">0</span></button>
+        <button class="booster-btn" id="btn-hammer" title="Hammer">🔨<span class="count" id="hammer-count">0</span></button>
+        <button class="booster-btn" id="btn-shake" title="Shake">🌀<span class="count" id="shake-count">0</span></button>
+        <button class="booster-btn booster-rainbow" id="btn-rainbow" title="Rainbow Doll">🌈<span class="count" id="rainbow-count">0</span></button>
+      </div>
+      <div class="booster-cancel-hint" id="booster-hint" style="display:none">Tap a doll · tap again to cancel</div>
     </div>
   </div>
 
@@ -803,7 +1462,21 @@
     <div class="panel">
       <h2 data-i18n="shop_title">⭐ Shop</h2>
       <div class="sub" data-i18n="shop_sub">Telegram Stars only. No ads, ever.</div>
+      <div class="admin-toggle-bar" id="admin-toggle-bar">
+        <div class="admin-toggle-title">🛠 ADMIN PRICING MODE</div>
+        <div class="admin-toggle-row">
+          <button class="admin-toggle-btn active" id="admin-mode-test">1⭐ Test (admin)</button>
+          <button class="admin-toggle-btn" id="admin-mode-real">Real prices</button>
+        </div>
+      </div>
       <div class="sku-grid" id="sku-grid"></div>
+
+      <div class="gem-shop-header">
+        <h2>💎 <span data-i18n="gem_shop_title">Use your Gems</span></h2>
+        <div class="sub"><span data-i18n="gem_shop_sub">Earn gems by playing — spend them here.</span>
+          <strong style="color:var(--gold-deep)"> · <span id="gem-shop-balance">0</span> 💎</strong></div>
+      </div>
+      <div class="sku-grid" id="gem-sku-grid"></div>
     </div>
   </div>
 
@@ -822,6 +1495,15 @@
       <div class="earn-section">
         <h3>🎯 <span data-i18n="missions">Missions</span></h3>
         <div id="mission-list"></div>
+      </div>
+
+      <div class="earn-section" id="spin-section">
+        <h3>🎡 <span data-i18n="spin_title">Wheel of Fortune</span> <span class="spin-status" id="spin-status"></span></h3>
+        <div class="spin-stage">
+          <div class="spin-pointer">▼</div>
+          <canvas id="spin-canvas" width="260" height="260"></canvas>
+        </div>
+        <button class="spin-btn" id="spin-btn" data-i18n="spin_go">Spin Free!</button>
       </div>
 
       <div class="earn-section" id="bp-section" style="display:none">
@@ -875,6 +1557,36 @@
   <div class="modal" id="modal-body"></div>
 </div>
 
+<!-- ===================== SEASON PASS FULL-SCREEN MODAL ===================== -->
+<div class="season-shade" id="season-shade">
+  <div class="season-modal">
+    <div class="season-modal-header">
+      <h2>🎟 <span data-i18n="season_pass_title">Season Pass</span>
+        <span class="season-countdown" id="season-countdown"></span></h2>
+      <button class="season-modal-close" id="season-close" aria-label="Close">×</button>
+    </div>
+    <div class="season-modal-body">
+      <div class="season-progress-shell">
+        <div class="season-progress-bar" id="season-progress-bar"></div>
+      </div>
+      <div class="season-progress-text" id="season-progress-text"></div>
+      <div class="season-premium-cta" id="season-premium-cta">
+        <div class="season-premium-text">
+          <strong>★ Premium Pass</strong><br>
+          <span>Unlock 4× rewards on every step</span>
+        </div>
+        <button class="btn season-buy-btn" id="season-buy-premium">100 ⭐</button>
+      </div>
+      <div class="season-rows-header">
+        <div></div>
+        <div class="lane-col-label free-col-label">FREE</div>
+        <div class="lane-col-label pro-col-label">★ PREMIUM</div>
+      </div>
+      <div class="season-rows" id="season-rows"></div>
+    </div>
+  </div>
+</div>
+
 <!-- ===================== FTUE OVERLAY ===================== -->
 <div class="ftue-shade" id="ftue-shade">
   <div class="ftue-panel">
@@ -894,9 +1606,111 @@
 
 <script>
 /* =========================================================
-   [JS-01] Constants — tiers, physics, palettes, container dims
+   [JS-00] Mixpanel client — direct HTTP API (no script tag).
+   Token is pulled from /api/flags at boot. Distinct ID is the
+   Telegram user ID, so the same player on phone + tablet shows
+   up as one user. Events use $insert_id for dedupe, time in
+   seconds, and standard super-properties (session_id, platform,
+   lang, version, mode). User profile is $set on first identify.
    ========================================================= */
 'use strict';
+
+const MX_VERSION = 'v0.3.26';
+const MX = {
+  token: '',
+  distinctId: null,
+  superProps: {},
+  sessionId: '',
+  sessionStartMs: 0,
+  ready: false,
+
+  init(token, distinctId, userProfile) {
+    this.token = String(token || '');
+    if (!this.token) return;
+    this.distinctId = String(distinctId || ('anon-' + Math.floor(Math.random() * 1e10)));
+    this.sessionId = (Date.now().toString(36) + Math.random().toString(36).slice(2, 8));
+    this.sessionStartMs = Date.now();
+    this.superProps = {
+      session_id: this.sessionId,
+      app_version: MX_VERSION,
+      platform: (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.platform) || 'web',
+      tg_version: (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.version) || '',
+    };
+    this.ready = true;
+    if (userProfile) this.setProfile(userProfile);
+  },
+
+  setSuper(props) { Object.assign(this.superProps, props || {}); },
+
+  track(eventName, props) {
+    if (!this.ready) return;
+    try {
+      const data = {
+        event: eventName,
+        properties: Object.assign({}, this.superProps, props || {}, {
+          token: this.token,
+          distinct_id: this.distinctId,
+          time: Math.floor(Date.now() / 1000),
+          $insert_id: Date.now().toString(36) + Math.random().toString(36).slice(2, 10),
+        }),
+      };
+      this._send('https://api.mixpanel.com/track', data);
+    } catch (e) {}
+  },
+
+  setProfile(props) {
+    if (!this.ready) return;
+    try {
+      this._send('https://api.mixpanel.com/engage', {
+        $token: this.token,
+        $distinct_id: this.distinctId,
+        $set: props,
+      });
+    } catch (e) {}
+  },
+
+  // Increment numeric profile properties — useful for things like
+  // total games / total IAPs / total merges that we want updated
+  // server-side in Mixpanel without a full setProfile call.
+  incrementProfile(props) {
+    if (!this.ready) return;
+    try {
+      this._send('https://api.mixpanel.com/engage', {
+        $token: this.token,
+        $distinct_id: this.distinctId,
+        $add: props,
+      });
+    } catch (e) {}
+  },
+
+  _send(url, body) {
+    const payload = JSON.stringify(body);
+    // base64-encode for the data= URL param (Mixpanel's classic format)
+    let encoded;
+    try { encoded = btoa(unescape(encodeURIComponent(payload))); }
+    catch (e) { encoded = btoa(payload); }
+    // ip=1 tells Mixpanel to resolve geo (country / region / city) from
+    // the request's source IP. Since this fetch goes DIRECT from the
+    // player's browser to api.mixpanel.com (not proxied via our server),
+    // the source IP IS the player. Without &ip=1 Mixpanel logs the event
+    // but leaves all geo fields empty — which is exactly the bug we hit.
+    const full = url + '?data=' + encodeURIComponent(encoded) + '&ip=1&verbose=0';
+    // sendBeacon survives page unload; falls back to keepalive fetch.
+    try {
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon(full);
+        return;
+      }
+    } catch (e) {}
+    try {
+      fetch(full, { method: 'GET', mode: 'no-cors', keepalive: true, cache: 'no-store' });
+    } catch (e) {}
+  },
+};
+
+/* =========================================================
+   [JS-01] Constants — tiers, physics, palettes, container dims
+   ========================================================= */
 
 // Doll tier radii (in canvas px at the reference 360-wide canvas)
 const TIER_RADII = [14, 19, 25, 32, 40, 50, 62, 75, 90, 106, 124];
@@ -930,7 +1744,7 @@ const TIER_PALETTE = [
   { body: '#f15bb5', scarf: '#b8328c', face: '#ffe6c8', apron: '#ffd0e7', accent: '#6e1748' },  // T8 pink
   { body: '#f72585', scarf: '#a8125a', face: '#ffe6c8', apron: '#ffc3da', accent: '#530a31' },  // T9 magenta
   { body: '#fdc500', scarf: '#b88317', face: '#ffe6c8', apron: '#fff3b8', accent: '#5a3e08' },  // T10 gold
-  { body: '#f1faee', scarf: '#a51d30', face: '#ffe6c8', apron: '#ffb3b3', accent: '#a51d30', crown: true }, // T11 Tsarina
+  { body: '#f1faee', scarf: '#a51d30', face: '#ffe6c8', apron: '#ffb3b3', accent: '#a51d30', crown: true }, // T11 Tsaritsa
 ];
 
 // Skin overrides — re-color every tier while preserving size and silhouette.
@@ -1007,12 +1821,19 @@ function getPalette(tier) {
   return fn ? fn(tier, base) : base;
 }
 
-// Physics — tuned for 60fps step
-const GRAVITY = 0.42;
-const VELOCITY_DAMP = 0.992;
+// Physics — tuned for 60fps step.
+//
+// v0.3.3 retune for "Suika feel": empty-jar fall time was ~0.77s (slow,
+// floaty). Reference games (original Suika, Watermelon Game, top-charting
+// clones) target ~0.5-0.6s. Bumped gravity to 0.7 (was 0.42), weakened
+// velocity damping to near-zero (was 0.992/substep ≈ 0.968/frame — added
+// noticeable drag), raised the safety cap to 30. New empty-jar fall time
+// is ~0.59s, which feels snappy without being uncontrollable.
+const GRAVITY = 0.7;
+const VELOCITY_DAMP = 0.999;     // effectively no drag — gravity wins
 const WALL_RESTITUTION = 0.15;
 const BALL_RESTITUTION = 0.05;
-const MAX_VEL = 22;
+const MAX_VEL = 30;
 const PHYS_SUBSTEPS = 4;
 
 // Game-over: a non-falling doll whose center sits above the death line for
@@ -1061,10 +1882,15 @@ const STRINGS = {
     game_over: 'Game Over', new_high: 'New High Score!',
     you_scored: 'You scored', your_best: 'Your best',
     use_revive: 'Use Revive', use_undo: 'Use Undo (50 💎)',
+    revive_for_stars: 'Revive for {n} ⭐',
+    revive_pending: 'Revive pending — tap again if needed',
     settings: 'Settings', sound_on: 'Sound: ON', sound_off: 'Sound: OFF',
     haptics_on: 'Vibrate: ON', haptics_off: 'Vibrate: OFF',
     skin: 'Skin',
+    language: 'Language',
     shop_title: '⭐ Shop', shop_sub: 'Telegram Stars only. No ads, ever.',
+    gem_shop_title: 'Use your Gems',
+    gem_shop_sub: 'Earn gems by playing — spend them here.',
     earn_title: '🎁 Earn', earn_sub: 'Free gems, missions, leaderboard.',
     daily_chest: 'Daily Login Chest', claim_today: 'Claim Today',
     chest_claimed: 'Claimed', come_back: 'Come back tomorrow!',
@@ -1081,33 +1907,45 @@ const STRINGS = {
     go: 'Go', check: 'Check', claim: 'Claim', done: 'Done',
     not_yet: 'Not yet — keep playing!',
     welcome_title: 'Matryoshka',
-    welcome_sub: 'Drop dolls. Merge same sizes. Reach the Tsarina.',
+    welcome_sub: 'Drop dolls. Merge same sizes. Reach the Tsaritsa.',
     welcome_start: 'Let\'s play!',
     iap_unavailable: 'Open from Telegram to buy Stars items.',
     purchase_success: 'Purchase added!',
     insufficient_gems: 'Not enough gems.',
-    undo_used: 'Undo!', no_undo: 'Nothing to undo', no_undos_left: 'No undos left',
+    undo_used: 'Undo!', no_undo: 'Drop a doll first to enable undo', no_undos_left: 'No undos left',
     revive_used: 'Revive!',
     no_revives: 'No revives left',
-    share_text: '🪆 I scored {score} on Matryoshka! Try and beat me 👉',
-    tier_names: ['Seed','Baby','Top','Girl','Aunt','Mother','Grandma','Merchant','Lady','Princess','Tsarina'],
+    // Includes the @bot mention so recipients see a clickable Telegram link
+    // to the game right inside the message body. The attached URL still
+    // renders an image preview + dedicated landing page with a PLAY button.
+    // The URL appended by Telegram's t.me/share/url dialog already points
+    // at the bot, so we drop the @mention to avoid the double-bot-reference
+    // the player flagged. Final message reads:
+    //   🪆 I scored 10079 on Matryoshka! 🎮 Beat me → https://t.me/MatryoshkaGameBot/app
+    share_text: '🪆 I scored {score} on Matryoshka! 🎮 Beat me →',
+    tier_names: ['Seed','Baby','Top','Girl','Aunt','Mother','Grandma','Merchant','Lady','Princess','Tsaritsa'],
     how_to_play: 'How to Play',
+    spin_title: 'Wheel of Fortune',
+    spin_go: 'Spin Free!',
+    spin_ready: 'Free spin ready',
+    spins_total: 'lifetime spins',
     ftue_skip: 'SKIP', ftue_back: '← Back', ftue_next: 'Next →', ftue_lets_play: 'Let\'s Play!',
-    ftue_pyramid_cap: '11 tiers · from seed to Tsarina',
+    ftue_pyramid_cap: '11 tiers · from seed to Tsaritsa',
     ftue_drop_tap: 'Release to drop',
     ftue_line_label: 'Death line',
-    ftue_goal_cap: 'The Tsarina — your goal',
+    ftue_goal_cap: 'The Tsaritsa — your goal',
     ftue_welcome_title: '🪆 Welcome to Matryoshka',
-    ftue_welcome_body: 'Drop nesting dolls into the jar, merge same sizes, and climb the eleven tiers to the legendary Tsarina.',
+    ftue_welcome_body: 'Drop nesting dolls into the jar, merge same sizes, and climb the eleven tiers to the legendary Tsaritsa.',
     ftue_drop_title: 'Slide and Drop',
     ftue_drop_body: 'Move your finger left and right to aim. Release to drop the doll into the jar.',
     ftue_merge_title: 'Same Sizes Merge!',
     ftue_merge_body: 'Two dolls of the same size combine into the next size up — and score you points.',
     ftue_line_title: 'Watch the Red Line',
     ftue_line_body: 'If a doll piles above the dashed line for too long, the game ends. Plan your drops!',
-    ftue_goal_title: 'Reach the Tsarina 👑',
-    ftue_goal_body: 'Two Tsarinas + 200 bonus points. How far can you climb?',
+    ftue_goal_title: 'Reach the Tsaritsa 👑',
+    ftue_goal_body: 'Two Tsaritsas + 200 bonus points. How far can you climb?',
     streak_milestones: 'Streak Milestones',
+    season_pass_title: 'Season Pass',
     stats_title: 'Your Stats',
     stat_best: 'Best Score (Endless)', stat_best_daily: 'Best Daily Today',
     stat_best_tier: 'Highest Tier', stat_best_combo: 'Best Combo',
@@ -1122,10 +1960,15 @@ const STRINGS = {
     game_over: 'Конец игры', new_high: 'Новый рекорд!',
     you_scored: 'Твой счёт', your_best: 'Лучший',
     use_revive: 'Возродиться', use_undo: 'Отмена (50 💎)',
+    revive_for_stars: 'Возродиться за {n} ⭐',
+    revive_pending: 'Возрождение в обработке — повтори при необходимости',
     settings: 'Настройки', sound_on: 'Звук: ВКЛ', sound_off: 'Звук: ВЫКЛ',
     haptics_on: 'Вибро: ВКЛ', haptics_off: 'Вибро: ВЫКЛ',
     skin: 'Скин',
+    language: 'Язык',
     shop_title: '⭐ Магазин', shop_sub: 'Только Telegram Stars. Без рекламы.',
+    gem_shop_title: 'Потрать гемы',
+    gem_shop_sub: 'Зарабатывай гемы в игре — трать их здесь.',
     earn_title: '🎁 Бонусы', earn_sub: 'Бесплатные гемы, миссии, рейтинг.',
     daily_chest: 'Ежедневный сундук', claim_today: 'Забрать сегодня',
     chest_claimed: 'Получено', come_back: 'Возвращайся завтра!',
@@ -1147,12 +1990,16 @@ const STRINGS = {
     iap_unavailable: 'Открой из Telegram чтобы покупать.',
     purchase_success: 'Покупка добавлена!',
     insufficient_gems: 'Недостаточно гемов.',
-    undo_used: 'Отмена!', no_undo: 'Нечего отменять', no_undos_left: 'Закончились отмены',
+    undo_used: 'Отмена!', no_undo: 'Сначала брось матрёшку', no_undos_left: 'Закончились отмены',
     revive_used: 'Возрождение!',
     no_revives: 'Нет возрождений',
-    share_text: '🪆 Мой счёт в Матрёшке — {score}! Сможешь больше? 👉',
+    share_text: '🪆 Мой счёт в Матрёшке — {score}! 🎮 Победи меня →',
     tier_names: ['Зёрнышко','Малыш','Юла','Девочка','Тётя','Мама','Бабушка','Купчиха','Барыня','Княгиня','Царица'],
     how_to_play: 'Как играть',
+    spin_title: 'Колесо Фортуны',
+    spin_go: 'Крутить!',
+    spin_ready: 'Бесплатный спин готов',
+    spins_total: 'всего вращений',
     ftue_skip: 'ПРОПУСТИТЬ', ftue_back: '← Назад', ftue_next: 'Далее →', ftue_lets_play: 'Поехали!',
     ftue_pyramid_cap: '11 уровней · от зёрнышка до Царицы',
     ftue_drop_tap: 'Отпусти, чтобы бросить',
@@ -1169,6 +2016,7 @@ const STRINGS = {
     ftue_goal_title: 'Доберись до Царицы 👑',
     ftue_goal_body: 'Две Царицы = +200 очков бонуса. Как высоко ты заберёшься?',
     streak_milestones: 'Награды за серию',
+    season_pass_title: 'Сезонный Пропуск',
     stats_title: 'Твоя статистика',
     stat_best: 'Лучший счёт (Беск.)', stat_best_daily: 'Дневной рекорд',
     stat_best_tier: 'Высший уровень', stat_best_combo: 'Лучшее комбо',
@@ -1194,15 +2042,15 @@ const STRINGS = {
     how_to_play: 'Cómo jugar',
     ftue_skip: 'OMITIR', ftue_back: '← Atrás', ftue_next: 'Siguiente →', ftue_lets_play: '¡A jugar!',
     ftue_welcome_title: '🪆 Bienvenido a Matryoshka',
-    ftue_welcome_body: 'Lanza muñecas, fusiona las del mismo tamaño y llega hasta la legendaria Tsarina.',
+    ftue_welcome_body: 'Lanza muñecas, fusiona las del mismo tamaño y llega hasta la legendaria Tsaritsa.',
     ftue_drop_title: 'Desliza y suelta',
     ftue_drop_body: 'Mueve tu dedo para apuntar. Suelta para dejar caer la muñeca.',
     ftue_merge_title: '¡Mismos tamaños se fusionan!',
     ftue_merge_body: 'Dos muñecas iguales se combinan en la siguiente — y te dan puntos.',
     ftue_line_title: 'Cuidado con la línea roja',
     ftue_line_body: 'Si una muñeca se queda sobre la línea, se acaba la partida. ¡Planea bien!',
-    ftue_goal_title: 'Alcanza a la Tsarina 👑',
-    ftue_goal_body: 'Dos Tsarinas = +200 puntos. ¿Hasta dónde llegarás?',
+    ftue_goal_title: 'Alcanza a la Tsaritsa 👑',
+    ftue_goal_body: 'Dos Tsaritsas = +200 puntos. ¿Hasta dónde llegarás?',
   },
   pt: {
     play: 'Jogar', shop: 'Loja', earn: 'Ganhar',
@@ -1220,15 +2068,15 @@ const STRINGS = {
     how_to_play: 'Como jogar',
     ftue_skip: 'PULAR', ftue_back: '← Voltar', ftue_next: 'Próximo →', ftue_lets_play: 'Vamos jogar!',
     ftue_welcome_title: '🪆 Bem-vindo ao Matryoshka',
-    ftue_welcome_body: 'Solte bonecas, una as do mesmo tamanho e alcance a lendária Tsarina.',
+    ftue_welcome_body: 'Solte bonecas, una as do mesmo tamanho e alcance a lendária Tsaritsa.',
     ftue_drop_title: 'Deslize e solte',
     ftue_drop_body: 'Mova o dedo para mirar. Solte para deixar cair a boneca.',
     ftue_merge_title: 'Tamanhos iguais se fundem!',
     ftue_merge_body: 'Duas bonecas iguais se juntam na próxima — e te dão pontos.',
     ftue_line_title: 'Cuidado com a linha',
     ftue_line_body: 'Se uma boneca ficar acima da linha, fim de jogo. Planeje seus lançamentos!',
-    ftue_goal_title: 'Alcance a Tsarina 👑',
-    ftue_goal_body: 'Duas Tsarinas = +200 pontos. Até onde você vai?',
+    ftue_goal_title: 'Alcance a Tsaritsa 👑',
+    ftue_goal_body: 'Duas Tsaritsas = +200 pontos. Até onde você vai?',
   },
   fr: {
     play: 'Jouer', shop: 'Boutique', earn: 'Gagner',
@@ -1521,6 +2369,11 @@ const defaultState = () => ({
   undos: 2,
   previews: 0,
   shieldDays: 0,
+  hammers: 2,                // start every player with 2 freebies
+  shakes: 2,
+  rainbows: 1,               // 1 rainbow doll free to try the mechanic
+  lastSpinYMD: '',
+  spinCount: 0,
   best: 0,
   bestDaily: 0,
   bestTierEver: 0,
@@ -1535,6 +2388,8 @@ const defaultState = () => ({
   achievements: {},      // {id: {unlockedYMD}}
   battlePassUntil: 0,
   activeTab: 'home',
+  // Season pass — see SEASON_PASS_STEPS + seasonState() for the schema.
+  season: null,
   ftueDone: false,
   mode: 'endless',       // 'endless' | 'daily'
   lastDailyYMD: '',
@@ -1553,6 +2408,9 @@ function load() {
     state = Object.assign(defaultState(), parsed);
     state.settings = Object.assign({ lang: detectLang(), sound: true, haptics: true }, parsed.settings || {});
   } catch (e) { state = defaultState(); state.settings.lang = detectLang(); }
+  // v0.3.38: daily mode is hidden — force endless until we decide to
+  // re-enable. Stored 'daily' from older saves gets normalized here.
+  state.mode = 'endless';
 }
 let saveDebounce;
 function save() {
@@ -1572,21 +2430,77 @@ function tgReady() {
   try {
     tg.ready();
     tg.expand();
+    // Bot API 8.0+ (late 2024): request TRUE fullscreen — hides Telegram's
+    // header chrome (X / bot name / ⋮) so the whole screen is gameplay.
+    // Older clients silently ignore. Also disable the vertical-swipe-down
+    // gesture so the player doesn't accidentally collapse the Mini App
+    // while flicking the carrier doll around.
+    try { tg.requestFullscreen && tg.requestFullscreen(); } catch (e) {}
+    try { tg.disableVerticalSwipes && tg.disableVerticalSwipes(); } catch (e) {}
     tg.setHeaderColor && tg.setHeaderColor('#a51d30');
     tg.setBackgroundColor && tg.setBackgroundColor('#a51d30');
+    // Re-fit the canvas whenever Telegram tells us the safe area or
+    // viewport changed — these can fire AFTER initial paint when the
+    // WebView is still measuring system insets (esp. on Android with
+    // the gesture nav bar). Without this, the jar floor can tuck behind
+    // the bottom tabs on tall phones. Also fires on fullscreen toggle,
+    // which we now trigger above.
+    const reflow = () => { applySafeArea(); try { fitCanvas(); } catch (e) {} };
+    tg.onEvent && tg.onEvent('safeAreaChanged', reflow);
+    tg.onEvent && tg.onEvent('contentSafeAreaChanged', reflow);
+    tg.onEvent && tg.onEvent('viewportChanged', reflow);
+    tg.onEvent && tg.onEvent('fullscreenChanged', reflow);
+    tg.onEvent && tg.onEvent('fullscreenFailed', reflow);
   } catch (e) {}
   applySafeArea();
 }
 function applySafeArea() {
   let top = 0, bottom = 0;
+  let isFullscreen = false;
   try {
     if (tg) {
+      isFullscreen = !!tg.isFullscreen;
       const ci = tg.contentSafeAreaInset;
       if (ci) { top = ci.top || 0; bottom = ci.bottom || 0; }
       const sa = tg.safeAreaInset;
       if (sa) { top = Math.max(top, sa.top || 0); bottom = Math.max(bottom, sa.bottom || 0); }
     }
   } catch (e) {}
+  // Defensive overrides (revised v0.3.9) — platform-aware now.
+  //
+  // TOP — When NOT in fullscreen, Telegram's top chrome plus the device
+  // notch / status bar adds up to:
+  //   * iOS:     chrome ~44 + notch/Dynamic Island ~44 = ~88px
+  //   * Android: chrome ~44 + status bar ~30           = ~74px
+  // Telegram clients under-report this in contentSafeAreaInset on many
+  // builds, hiding our topbar behind the X Close / Dynamic Island. We
+  // floor at 92 universally — covers iOS comfortably, slightly over-
+  // pads Android (~18px wasted) but that's far better than a hidden
+  // gem pill.
+  //
+  // BOTTOM — Behavior diverges hard between platforms:
+  //   * Android: Telegram already excludes the gesture nav from the
+  //     WebApp viewport, so we don't need bottom padding — adding it
+  //     creates a stripe of empty space inside the tab bar element.
+  //     Saw 80-90px over-reports from Telegram → big white strip.
+  //     Cap at 8px (basically a hairline buffer).
+  //   * iOS: the home indicator (~34px) overlaps WebApp content, so
+  //     we need ~38px padding to keep the tabs above it.
+  //   * Desktop / unknown: 24px sane default.
+  const platform = (tg && tg.platform) || '';
+  const isIOS = platform === 'ios';
+  const isAndroid = platform === 'android';
+  // v0.3.39 — floor reduced 140 → 110. Player feedback: 140 left too
+  // much empty space between the top of the screen and the topbar.
+  // 110 still clears the Telegram chrome on most clients (iPhone
+  // Dynamic Island chrome bottom ~100-105px) with a tiny buffer.
+  // The fullscreen check stays disabled — always apply the floor.
+  if (top < 110) top = 110;
+  let bottomCap;
+  if (isAndroid) bottomCap = 8;
+  else if (isIOS) bottomCap = 38;
+  else bottomCap = 24;
+  if (bottom > bottomCap) bottom = bottomCap;
   document.documentElement.style.setProperty('--tg-safe-top', top + 'px');
   document.documentElement.style.setProperty('--tg-safe-bottom', bottom + 'px');
 }
@@ -1664,12 +2578,25 @@ class Body {
     this.vy = 0;
     this.tier = tier;
     this.r = TIER_RADII[tier];
-    this.angle = (Math.random() - 0.5) * 0.3;
-    this.spin = (Math.random() - 0.5) * 0.04;
+    // Spin & rotation: subtle, controlled (v0.3.13). v0.3.2 zeroed it
+    // completely because uncontrolled spin felt chaotic. Now we bring a
+    // tiny bit back: small initial tilt, collisions impart a very small
+    // tangential spin (1/200th of original), strong damping each substep,
+    // active "restoration" torque each frame pulling angle back to 0, and
+    // a hard cap on max tilt. Result: dolls gently sway from impacts and
+    // settle into a slightly hand-placed look — never spinning, never
+    // upside down.
+    this.angle = (Math.random() - 0.5) * 0.06;
+    this.spin = 0;
+    // Facial-animation state (v0.3.13)
+    this.blinkUntil = 0;
+    this.surpriseUntil = 0;
+    this.nextBlinkAt = performance.now() + 1500 + Math.random() * 4000;
     this.merged = false;
     this.bornAt = performance.now();
     this.restingFrames = 0;
     this.scale = 0.05;     // pop-in
+    this.rainbow = false;  // v0.3.15 rainbow wildcard doll
   }
 }
 
@@ -1709,12 +2636,15 @@ async function loadDailySeed() {
 }
 
 function setMode(m) {
+  const prev = state.mode;
   state.mode = m;
   save();
-  // Reset RNG so the queue starts deterministically from the daily seed
-  // even after switching modes mid-session.
   if (m === 'daily') dailyRng = mulberry32(dailySeed);
   document.querySelectorAll('.mode-pill').forEach(p => p.classList.toggle('active', p.getAttribute('data-mode') === m));
+  if (typeof MX !== 'undefined' && MX.ready) {
+    MX.track('Mode Switched', { from: prev, to: m });
+    MX.setSuper({ mode: m });
+  }
   newGame();
 }
 
@@ -1734,20 +2664,25 @@ function physicsStep() {
       if (b.vx < -MAX_VEL) b.vx = -MAX_VEL;
       b.x += b.vx * substep;
       b.y += b.vy * substep;
+      // Subtle rotation (v0.3.13): integrate spin, damp aggressively,
+      // and apply a soft restoring torque pulling angle back to 0.
       b.angle += b.spin * substep;
-      b.spin *= 0.985;
+      b.spin *= 0.94;
+      b.angle += -b.angle * 0.035 * substep;
+      // Hard cap so a freak impact can't flip a doll past ~12°.
+      if (b.angle > 0.20) b.angle = 0.20;
+      if (b.angle < -0.20) b.angle = -0.20;
       if (b.scale < 1) b.scale = Math.min(1, b.scale + 0.06 * substep);
     }
-    // Walls + floor
+    // Walls + floor — no spin imparted (zeroed v0.3.2)
     for (const b of world) {
       if (b.merged) continue;
-      if (b.x - b.r < JAR.left)  { b.x = JAR.left + b.r; b.vx = Math.abs(b.vx) * WALL_RESTITUTION; b.spin += b.vy * 0.001; }
-      if (b.x + b.r > JAR.right) { b.x = JAR.right - b.r; b.vx = -Math.abs(b.vx) * WALL_RESTITUTION; b.spin -= b.vy * 0.001; }
+      if (b.x - b.r < JAR.left)  { b.x = JAR.left + b.r; b.vx = Math.abs(b.vx) * WALL_RESTITUTION; }
+      if (b.x + b.r > JAR.right) { b.x = JAR.right - b.r; b.vx = -Math.abs(b.vx) * WALL_RESTITUTION; }
       if (b.y + b.r > JAR.bottom) {
         b.y = JAR.bottom - b.r;
         b.vy = -Math.abs(b.vy) * WALL_RESTITUTION;
         b.vx *= 0.92;
-        b.spin *= 0.85;
       }
     }
     // Body-body collisions (naive O(n²), fine for <80 bodies)
@@ -1778,33 +2713,84 @@ function physicsStep() {
             const ix = j2 * nx, iy = j2 * ny;
             a.vx -= ix; a.vy -= iy;
             c.vx += ix; c.vy += iy;
-            // tiny spin transfer for visual life
+            // Tiny tangential spin transfer (v0.3.13) — adds a hint of
+            // life when dolls slide past each other. 1/200th of the v0.1
+            // value plus aggressive damping each step prevents runaway.
             const tan = -ny * rvx + nx * rvy;
-            a.spin -= tan * 0.0005;
-            c.spin += tan * 0.0005;
+            a.spin -= tan * 0.000025;
+            c.spin += tan * 0.000025;
           }
-          // Merge check — same tier, last substep only (avoid double-merge)
-          if (s === PHYS_SUBSTEPS - 1 && a.tier === c.tier && a.tier < TIER_COUNT - 1) {
-            mergeQueue.push([a, c]);
-          } else if (s === PHYS_SUBSTEPS - 1 && a.tier === c.tier && a.tier === TIER_COUNT - 1) {
-            // Two Tsarinas — special pop, both removed, big bonus
-            mergeQueue.push([a, c, true]);
-            markAchievementProgress('tsarina_pair');
+          // Merge check — last substep only (avoid double-merge).
+          // Rainbow wildcards have priority: a rainbow + ANY non-rainbow
+          // produces a tier+1 doll based on the regular doll's tier.
+          // Two rainbows touching trigger a celebratory bonus.
+          if (s === PHYS_SUBSTEPS - 1) {
+            if (a.rainbow && c.rainbow) {
+              mergeQueue.push([a, c, 'rainbow_pair']);
+            } else if (a.rainbow || c.rainbow) {
+              const reg = a.rainbow ? c : a;
+              if (reg.tier < TIER_COUNT - 1) {
+                mergeQueue.push([a, c, 'rainbow_merge', reg.tier]);
+              } else {
+                // Rainbow + max-tier Tsaritsa = also a celebration
+                mergeQueue.push([a, c, 'rainbow_pair']);
+              }
+            } else if (a.tier === c.tier && a.tier < TIER_COUNT - 1) {
+              mergeQueue.push([a, c]);
+            } else if (a.tier === c.tier && a.tier === TIER_COUNT - 1) {
+              mergeQueue.push([a, c, true]);
+              markAchievementProgress('tsarina_pair');
+            }
           }
         }
       }
     }
     // Resolve merges
     for (const m of mergeQueue) {
-      const [a, c, top] = m;
+      const [a, c, kind, baseTier] = m;
       if (a.merged || c.merged) continue;
       a.merged = true; c.merged = true;
       const mx = (a.x + c.x) / 2;
       const my = (a.y + c.y) / 2;
       const mvx = (a.vx + c.vx) / 2;
       const mvy = (a.vy + c.vy) / 2;
-      if (top) {
-        // Tsarina × Tsarina = celebration
+      if (kind === 'rainbow_pair') {
+        // Two rainbows OR rainbow+Tsaritsa — fireworks, no new body, big score
+        spawnParticles(mx, my, 60, '#fdc500', 1.6);
+        spawnParticles(mx, my, 40, '#f72585', 1.4);
+        spawnParticles(mx, my, 40, '#00f5d4', 1.4);
+        spawnParticles(mx, my, 30, '#39ff14', 1.3);
+        addScore(500);
+        spawnFloatScore(mx, my - 8, '+500 🌈🌈');
+        playMergeSound(11);
+        setTimeout(() => tone(880, 0.18, 'triangle', 0.14), 80);
+        tgHaptic('heavy');
+        kickShake(20);
+      } else if (kind === 'rainbow_merge') {
+        // Rainbow + regular → tier+1 doll spawns with 2× score bonus
+        const newTier = baseTier + 1;
+        const nb = new Body(mx, my, newTier);
+        nb.vx = mvx * 0.4; nb.vy = mvy * 0.4;
+        nb.scale = 0.3;
+        nb.surpriseUntil = performance.now() + 600;
+        world.push(nb);
+        if (newTier > (state.bestTierEver || 0)) state.bestTierEver = newTier;
+        if (newTier > (state.highestTierSeen || 0)) {
+          state.highestTierSeen = newTier;
+          markTierDot(newTier, true);
+        }
+        const gain = Math.round(TIER_SCORES[newTier] * 2);
+        addScore(gain);
+        state.totalMergesEver = (state.totalMergesEver || 0) + 1;
+        spawnParticles(mx, my, 22 + newTier * 2, '#fdc500', 1.3);
+        spawnParticles(mx, my, 16, '#f72585', 1.1);
+        spawnFloatScore(mx, my - 8, '+' + gain + ' 🌈');
+        playMergeSound(newTier + 1);
+        tgHaptic('medium');
+        kickShake(8 + newTier);
+        bounceMascot(6);
+      } else if (kind === true) {
+        // Tsaritsa × Tsaritsa = celebration
         spawnParticles(mx, my, 36, '#fdc500', 1.5);
         spawnParticles(mx, my, 24, '#a51d30', 1.2);
         addScore(200);
@@ -1817,7 +2803,9 @@ function physicsStep() {
         nb.vx = mvx * 0.6;
         nb.vy = mvy * 0.6;
         nb.scale = 0.3;
-        nb.spin = (a.spin + c.spin) * 0.5;
+        // Briefly surprised face on the freshly-merged doll — wide eyes
+        // + open mouth + brighter cheeks for ~450ms.
+        nb.surpriseUntil = performance.now() + 450;
         world.push(nb);
         // Combo tracking: chained merges within the window multiply score
         const now = performance.now();
@@ -1841,7 +2829,20 @@ function physicsStep() {
           markTierDot(newTier, true);
           if (newTier === 5) markMissionProgress('mission_merge_t6_done', true);  // T6 in 0-indexed === idx 5
         }
-        if (newTier > (state.bestTierEver || 0)) state.bestTierEver = newTier;
+        if (newTier > (state.bestTierEver || 0)) {
+          state.bestTierEver = newTier;
+          // Fire a "First Tier N" funnel event the very first time the
+          // player reaches each new milestone tier. Mixpanel funnels can
+          // then track e.g. % of players who reach Mother (T6) → Tsaritsa (T11).
+          if (typeof MX !== 'undefined' && MX.ready) {
+            MX.track('First Tier Reached', { tier: newTier, display_tier: newTier + 1 });
+            if (newTier === 10) MX.track('First Tsaritsa');
+          }
+        }
+        // First-merge milestone — only fires once ever.
+        if ((state.totalMergesEver || 0) === 0 && typeof MX !== 'undefined' && MX.ready) {
+          MX.track('First Merge');
+        }
         spawnParticles(mx, my, 10 + newTier * 2, getPalette(newTier).body, 1);
         spawnFloatScore(mx, my - 8, '+' + gain + (mult > 1 ? '  x' + mult.toFixed(1) : ''));
         playMergeSound(newTier);
@@ -1865,8 +2866,36 @@ const ctx = canvas.getContext('2d');
 const nextCanvas = document.getElementById('next-canvas');
 const nextCtx = nextCanvas.getContext('2d');
 
+// HiDPI helper: bumps the canvas internal buffer to (cssW × dpr, cssH × dpr)
+// and applies a setTransform so all drawing code still uses LOGICAL coords
+// (cssW × cssH). Without this, the canvas would be CSS-stretched on 3× DPR
+// Android phones and every doll would look pixelated.
+//
+// DPR cap raised to 3.5 in v0.3.3 — was capped at 2.5 which left modern
+// Android flagships (3× / 3.5×) rendering at sub-native and upscaling
+// in the WebView, which is the actual cause of the "still blurry" issue.
+function ensureHiDPI(cnv, cssW, cssH) {
+  const dpr = Math.min(3.5, window.devicePixelRatio || 1);
+  const pw = Math.round(cssW * dpr);
+  const ph = Math.round(cssH * dpr);
+  if (cnv.width !== pw || cnv.height !== ph) {
+    cnv.style.width = cssW + 'px';
+    cnv.style.height = cssH + 'px';
+    cnv.width = pw;
+    cnv.height = ph;
+  }
+  const c = cnv.getContext('2d');
+  c.setTransform(pw / cssW, 0, 0, ph / cssH, 0, 0);
+  return c;
+}
+
 let shakeAmp = 0;
 function kickShake(a) { shakeAmp = Math.min(28, Math.max(shakeAmp, a)); }
+
+// Highest "above-the-line" timer in the world, normalized 0..1. Used to
+// pulse the death line so the player can see danger building before the
+// game actually ends.
+let dangerLevel = 0;
 
 // Combo state — not persisted across runs; resets on newGame.
 let comboCount = 0;
@@ -1874,6 +2903,15 @@ let lastMergeAtMs = 0;
 const comboFlashes = [];      // {label, mult, life, max, scale}
 function spawnComboFlash(combo, mult) {
   const label = COMBO_LABELS[Math.min(8, combo)] || 'CHAIN';
+  // When a new combo flash arrives, speed up the decay of any existing
+  // flashes so only the LATEST label dominates the screen. Without this,
+  // a 5-merge chain stacks "NICE / COMBO / SWEET / INSANE / LEGENDARY"
+  // labels on top of each other and becomes unreadable. Cap their
+  // remaining life at 8 frames (~130ms) so they fade out gracefully
+  // while the new one fires its full 60-frame animation.
+  for (const f of comboFlashes) {
+    if (f.life > 8) f.life = 8;
+  }
   comboFlashes.push({ combo, label, mult, life: 60, max: 60, scale: 0.4, rot: (Math.random() - 0.5) * 0.18 });
 }
 function stepComboFlashes() {
@@ -1893,7 +2931,11 @@ function drawComboFlashes() {
     const p = 1 - f.life / f.max;
     const alpha = p < 0.85 ? 1 : (1 - (p - 0.85) / 0.15);
     ctx.save();
-    ctx.translate(canvas.width / 2, 200);
+    // LOGICAL coords: jar center is at x=180 of the 360-wide logical canvas.
+    // Bug fix (v0.3.4): was using canvas.width/2, which is the PHYSICAL
+    // buffer size after the HiDPI scaling — that translated by 630+ logical
+    // units, throwing the combo flash off-canvas to the side of the screen.
+    ctx.translate(180, 200);
     ctx.rotate(f.rot * (1 - p));
     ctx.scale(f.scale, f.scale);
     ctx.globalAlpha = alpha;
@@ -1925,10 +2967,13 @@ function drawJar() {
   ctx.fillStyle = 'rgba(0,0,0,0.04)';
   ctx.fillRect(JAR.left, JAR.bottom - 18, JAR.right - JAR.left, 18);
 
-  // Death line (subtle dashed)
+  // Death line — pulses brighter and thicker as danger builds, so the
+  // player sees the threat before the 1.6s game-over timer fires.
   ctx.save();
-  ctx.strokeStyle = 'rgba(255,84,112,0.55)';
-  ctx.lineWidth = 1.5;
+  const flash = dangerLevel > 0.05 ? (0.7 + 0.3 * Math.sin(performance.now() / 80)) : 1;
+  const dlAlpha = (0.55 + dangerLevel * 0.4) * flash;
+  ctx.strokeStyle = 'rgba(255,84,112,' + dlAlpha.toFixed(3) + ')';
+  ctx.lineWidth = 1.5 + dangerLevel * 2;
   ctx.setLineDash([6, 4]);
   ctx.beginPath();
   ctx.moveTo(JAR.left + 8, JAR.deathLineY);
@@ -1965,8 +3010,28 @@ function roundRect(c, x, y, w, h, r) {
   c.closePath();
 }
 
-function drawMatryoshka(c, x, y, r, tier, angle, scale) {
-  const pal = getPalette(tier);
+// drawMatryoshka — body parameter optional. When passed, reads facial
+// state (blink, surprise) from the Body so dolls in the world get
+// expressive faces. Carrier preview, next-pill preview, FTUE demos,
+// and share-card render pass null and get the default happy face.
+function drawMatryoshka(c, x, y, r, tier, angle, scale, body) {
+  const basePal = getPalette(tier);
+  const now = performance.now();
+  const isBlinking = body && now < body.blinkUntil;
+  const isSurprised = body && now < body.surpriseUntil;
+  const isRainbow = body && body.rainbow;
+  // Rainbow dolls override the tier-specific scarf/apron/accent colors
+  // with a neutral white-and-ink palette so the cycling rainbow body
+  // stays the visual focus and the face reads cleanly. Crown disabled
+  // for rainbow regardless of underlying tier.
+  const pal = isRainbow ? {
+    body: basePal.body,
+    scarf: '#fff5d2',
+    face: '#ffe6c8',
+    apron: '#fff5d2',
+    accent: '#2b0a10',
+    crown: false,
+  } : basePal;
   c.save();
   c.translate(x, y);
   c.rotate(angle || 0);
@@ -1975,7 +3040,21 @@ function drawMatryoshka(c, x, y, r, tier, angle, scale) {
   // Body silhouette (egg-ish: wider at bottom, narrow at top)
   // (No drop shadow — removed in v0.3.1 because stacked dolls had a band of
   // shadows under each one which read as visual noise.)
-  c.fillStyle = pal.body;
+  if (isRainbow) {
+    // Rainbow gradient body — cycles around the body angle with time so
+    // the doll visibly shimmers in the jar.
+    const phase = now / 700;
+    const grad = c.createLinearGradient(0, -r, 0, r);
+    const cycle = (offset) => 'hsl(' + (((phase + offset) * 360) % 360) + ', 90%, 62%)';
+    grad.addColorStop(0,    cycle(0.0));
+    grad.addColorStop(0.25, cycle(0.18));
+    grad.addColorStop(0.5,  cycle(0.36));
+    grad.addColorStop(0.75, cycle(0.54));
+    grad.addColorStop(1,    cycle(0.72));
+    c.fillStyle = grad;
+  } else {
+    c.fillStyle = pal.body;
+  }
   c.beginPath();
   c.ellipse(0, 0, r * 0.95, r, 0, 0, Math.PI * 2);
   c.fill();
@@ -2001,26 +3080,57 @@ function drawMatryoshka(c, x, y, r, tier, angle, scale) {
   c.ellipse(0, -r * 0.4, r * 0.36, r * 0.28, 0, 0, Math.PI * 2);
   c.fill();
 
-  // Eyes
+  // Eyes — facial-state aware (v0.3.13)
   c.fillStyle = pal.accent;
-  c.beginPath();
-  c.ellipse(-r * 0.13, -r * 0.4, r * 0.04, r * 0.06, 0, 0, Math.PI * 2);
-  c.ellipse(r * 0.13, -r * 0.4, r * 0.04, r * 0.06, 0, 0, Math.PI * 2);
-  c.fill();
+  if (isBlinking) {
+    // Horizontal line eyes (blink)
+    c.strokeStyle = pal.accent;
+    c.lineWidth = Math.max(1, r * 0.04);
+    c.beginPath();
+    c.moveTo(-r * 0.17, -r * 0.40); c.lineTo(-r * 0.09, -r * 0.40);
+    c.moveTo( r * 0.09, -r * 0.40); c.lineTo( r * 0.17, -r * 0.40);
+    c.stroke();
+  } else if (isSurprised) {
+    // Wide round "wow" eyes
+    c.beginPath();
+    c.arc(-r * 0.13, -r * 0.40, r * 0.065, 0, Math.PI * 2);
+    c.arc( r * 0.13, -r * 0.40, r * 0.065, 0, Math.PI * 2);
+    c.fill();
+    // Little white highlight inside each eye for life
+    c.fillStyle = '#fff';
+    c.beginPath();
+    c.arc(-r * 0.11, -r * 0.42, r * 0.02, 0, Math.PI * 2);
+    c.arc( r * 0.15, -r * 0.42, r * 0.02, 0, Math.PI * 2);
+    c.fill();
+  } else {
+    // Default ellipse eyes
+    c.beginPath();
+    c.ellipse(-r * 0.13, -r * 0.4, r * 0.04, r * 0.06, 0, 0, Math.PI * 2);
+    c.ellipse(r * 0.13, -r * 0.4, r * 0.04, r * 0.06, 0, 0, Math.PI * 2);
+    c.fill();
+  }
 
-  // Cheeks
-  c.fillStyle = 'rgba(231,57,57,0.55)';
+  // Cheeks (more saturated when surprised — like a blush of joy)
+  const cheekAlpha = isSurprised ? 0.78 : 0.55;
+  c.fillStyle = 'rgba(231,57,57,' + cheekAlpha + ')';
   c.beginPath();
   c.ellipse(-r * 0.20, -r * 0.32, r * 0.06, r * 0.05, 0, 0, Math.PI * 2);
   c.ellipse(r * 0.20, -r * 0.32, r * 0.06, r * 0.05, 0, 0, Math.PI * 2);
   c.fill();
 
-  // Mouth
-  c.strokeStyle = pal.accent;
-  c.lineWidth = Math.max(1, r * 0.025);
-  c.beginPath();
-  c.arc(0, -r * 0.30, r * 0.08, 0.1 * Math.PI, 0.9 * Math.PI);
-  c.stroke();
+  // Mouth — open "wow" oval when surprised, smile arc otherwise
+  if (isSurprised) {
+    c.fillStyle = pal.accent;
+    c.beginPath();
+    c.ellipse(0, -r * 0.27, r * 0.045, r * 0.06, 0, 0, Math.PI * 2);
+    c.fill();
+  } else {
+    c.strokeStyle = pal.accent;
+    c.lineWidth = Math.max(1, r * 0.025);
+    c.beginPath();
+    c.arc(0, -r * 0.30, r * 0.08, 0.1 * Math.PI, 0.9 * Math.PI);
+    c.stroke();
+  }
 
   // Apron floral motif (size-dependent: only on T3+)
   if (tier >= 2) {
@@ -2064,7 +3174,20 @@ function drawMatryoshka(c, x, y, r, tier, angle, scale) {
   c.quadraticCurveTo(r * 0.4, -r * 0.5, r * 0.95, -r * 0.05);
   c.stroke();
 
-  // Crown for Tsarina
+  // Rainbow doll: sparkly stars orbiting the head so it reads as magical
+  if (isRainbow) {
+    const sparkleN = 6;
+    for (let i = 0; i < sparkleN; i++) {
+      const a = (i / sparkleN) * Math.PI * 2 + now / 600;
+      const sx = Math.cos(a) * r * 1.05;
+      const sy = Math.sin(a) * r * 0.55 - r * 0.4;
+      const sz = r * 0.07 * (0.6 + 0.4 * Math.sin(now / 250 + i));
+      c.fillStyle = i % 2 === 0 ? '#fff' : '#fdc500';
+      c.beginPath(); c.arc(sx, sy, Math.max(0.8, sz), 0, Math.PI * 2); c.fill();
+    }
+  }
+
+  // Crown for Tsaritsa
   if (pal.crown) {
     c.fillStyle = '#fdc500';
     c.beginPath();
@@ -2126,7 +3249,33 @@ function drawParticles() {
 
 // Floating score popups
 const floats = [];
+// stepFaces — drives the blink cycle for every doll in the world.
+// Each Body has a `nextBlinkAt` timer; when it elapses we set a short
+// blink window and schedule the next blink in 1.8–5.5s. Cheap to run
+// over the whole world every frame.
+function stepFaces() {
+  const now = performance.now();
+  for (const b of world) {
+    if (b.merged) continue;
+    if (now > b.nextBlinkAt) {
+      b.blinkUntil = now + 110;          // ~6 frames at 60fps
+      b.nextBlinkAt = now + 1800 + Math.random() * 3700;
+    }
+  }
+}
+
 function spawnFloatScore(x, y, text) {
+  // Clamp x to stay clearly inside the jar so the popup text never bleeds
+  // out the side when merges happen near the walls. The text is roughly
+  // 80 logical units wide for combo strings like "+45  x3.0", so we keep
+  // the anchor 45+ units in from each wall.
+  const safeLeft = JAR.left + 50;
+  const safeRight = JAR.right - 50;
+  if (x < safeLeft) x = safeLeft;
+  if (x > safeRight) x = safeRight;
+  // Also clamp y so the popup never floats up into / past the topbar area
+  // of the canvas, which on tall jars can read as "outside the box".
+  if (y < JAR.top + 20) y = JAR.top + 20;
   floats.push({ x, y, text, life: 38, max: 38 });
 }
 function stepFloats() {
@@ -2160,17 +3309,35 @@ let running = true;
 let score = 0;
 let mergeCount = 0;
 let lastTickMs = 0;
+let gameStartedAtMs = performance.now();
+let gameRevived = false;
+// Paid revives within the current run — drives the progressive price
+// (n+1)*25⭐ on the game-over modal. Free inventory revives don't count.
+// Resets on newGame.
+let paidRevivesUsedThisRun = 0;
+// Season pass points snapshot — captured BEFORE the game's score is
+// added so the post-match snapshot card can animate from "before" to
+// "after" position on the progress bar.
+let seasonPointsBeforeGame = 0;
 
 function addScore(n) {
   score += n;
   mergeCount++;
   document.getElementById('cur-score').textContent = score;
   document.getElementById('merge-count').textContent = mergeCount;
+  // v0.3.38 — accumulate live into season points so the Season Pass
+  // strip fills in real-time as the player merges, not only at game-over.
+  if (n > 0) {
+    addSeasonPoints(n);
+    refreshSeasonStrip();
+  }
 }
 
 function render() {
-  const w = canvas.width, h = canvas.height;
-  ctx.clearRect(0, 0, w, h);
+  // Re-apply the logical→physical scale every frame. Cheap insurance in
+  // case anything in the call chain stomped the transform.
+  ctx.setTransform(canvas.width / 360, 0, 0, canvas.height / 540, 0, 0);
+  ctx.clearRect(0, 0, 360, 540);   // clear in LOGICAL coords
 
   // Shake offset
   let ox = 0, oy = 0;
@@ -2187,13 +3354,15 @@ function render() {
   // Sort by tier so larger draw on top (more satisfying)
   const drawList = world.slice().sort((a, b) => a.tier - b.tier);
   for (const b of drawList) {
-    drawMatryoshka(ctx, b.x, b.y, b.r, b.tier, b.angle, b.scale);
+    drawMatryoshka(ctx, b.x, b.y, b.r, b.tier, b.angle, b.scale, b);
   }
 
-  // Carrier doll preview at top
+  // Carrier doll preview at top — pass carrier as the `body` arg only
+  // when it's a rainbow so the gradient + sparkles render.
   if (carrier) {
     ctx.globalAlpha = 0.86;
-    drawMatryoshka(ctx, carrier.x, carrier.y, carrier.r, carrier.tier, 0, 1);
+    drawMatryoshka(ctx, carrier.x, carrier.y, carrier.r, carrier.tier, 0, 1,
+      carrier.rainbow ? carrier : null);
     ctx.globalAlpha = 1;
     // dotted drop line
     ctx.save();
@@ -2221,6 +3390,7 @@ function gameTick() {
     stepFloats();
     stepComboFlashes();
     stepMascot();
+    stepFaces();
     // Combo timeout — reset count if window expired
     if (comboCount > 0 && (performance.now() - lastMergeAtMs) > COMBO_WINDOW_MS) {
       comboCount = 0;
@@ -2235,14 +3405,18 @@ function gameTick() {
    [JS-08] Drop UX — pointer drag carrier, drop on release
    ========================================================= */
 let nextTier = chooseSpawnTier();
+let pendingRainbow = false;       // when true, next spawned carrier is rainbow
 function spawnCarrier() {
   const tier = nextTier;
   nextTier = chooseSpawnTier();
-  const r = TIER_RADII[tier];
-  // Carrier hovers above jar at y just above top, x = last cursor or center
+  const isRainbow = pendingRainbow;
+  pendingRainbow = false;
+  // Rainbow carrier uses a medium fixed radius (~tier 4) regardless of
+  // the queue tier — keeps it visually distinct and easier to aim with.
+  const r = isRainbow ? TIER_RADII[4] : TIER_RADII[tier];
   const x = clamp(lastDropX || (JAR.left + JAR.right) / 2, JAR.left + r + 4, JAR.right - r - 4);
   const y = Math.max(40, JAR.top - r - 6);
-  carrier = { x, y, r, tier };
+  carrier = { x, y, r, tier, rainbow: isRainbow };
   markTierDot(tier, false);
   renderNext();
 }
@@ -2255,12 +3429,18 @@ function onPointer(e) {
   if (!carrier) return;
   if (performance.now() < carrierLockedUntil) return;
   const rect = canvas.getBoundingClientRect();
-  const xRaw = (e.clientX - rect.left) * (canvas.width / rect.width);
+  // Map screen pixels → logical 360-wide coords (NOT to the physical buffer
+  // size, which is now DPR-scaled).
+  const xRaw = (e.clientX - rect.left) * (360 / rect.width);
   carrier.x = clamp(xRaw, JAR.left + carrier.r + 4, JAR.right - carrier.r - 4);
   lastDropX = carrier.x;
 }
 function onPointerDown(e) {
-  if (!running || !carrier) return;
+  if (!running) return;
+  // Hammer-mode hijacks pointerdown — if a booster is active, the tap
+  // removes a doll instead of moving the carrier.
+  if (handleHammerHit(e)) return;
+  if (!carrier) return;
   if (performance.now() < carrierLockedUntil) return;
   pointerDown = true;
   onPointer(e);
@@ -2307,10 +3487,10 @@ function restoreSnapshot(snap) {
   renderNext();
 }
 function updateUndoButton() {
-  const btn = document.getElementById('btn-undo');
-  if (!btn) return;
-  const canUndo = !!undoSnapshot && (state.undos || 0) > 0 && running;
-  btn.style.display = canUndo ? 'inline-flex' : 'none';
+  // Undo is now always visible in the booster row. The disabled style is
+  // driven by refreshBoosterHUD (which checks both the count and the
+  // snapshot). This function just kicks the HUD refresh.
+  refreshBoosterHUD();
 }
 
 function doDrop() {
@@ -2322,6 +3502,10 @@ function doDrop() {
   const b = new Body(carrier.x, carrier.y, carrier.tier);
   b.scale = 1;
   b.vy = 0;
+  if (carrier.rainbow) {
+    b.rainbow = true;
+    b.r = carrier.r;   // preserve the carrier's display radius for rainbows
+  }
   world.push(b);
   tgHaptic('soft');
   playDropSound();
@@ -2332,7 +3516,11 @@ function doDrop() {
 
 function doUndo() {
   if (!undoSnapshot) { toast(t('no_undo')); return; }
-  if ((state.undos || 0) <= 0) { toast(t('no_undos_left')); return; }
+  if ((state.undos || 0) <= 0) {
+    if (typeof MX !== 'undefined') MX.track('Booster Tap Empty', { kind: 'undo' });
+    quickBuyBooster('undo');
+    return;
+  }
   state.undos--;
   restoreSnapshot(undoSnapshot);
   undoSnapshot = null;
@@ -2343,6 +3531,7 @@ function doUndo() {
   save();
   toast(t('undo_used') + ' (' + state.undos + ')');
   tgHaptic('light');
+  if (typeof MX !== 'undefined') MX.track('Booster Used', { kind: 'undo' });
 }
 
 canvas.addEventListener('pointerdown', onPointerDown, { passive: false });
@@ -2355,15 +3544,224 @@ document.querySelectorAll('.mode-pill').forEach(p => {
   p.addEventListener('click', () => setMode(p.getAttribute('data-mode')));
 });
 
+/* =========================================================
+   [JS-08c] Boosters — Hammer + Shake
+   =========================================================
+   Hammer: enters "tap a doll" mode. Next canvas click hit-tests against
+   every body in the world and removes the topmost match (with explosion
+   FX), decrementing state.hammers. Tap an empty area, or tap the Hammer
+   button again, to cancel without spending a charge.
+   Shake: fires immediately. Applies a random horizontal impulse to every
+   body so the stack reshuffles, decrementing state.shakes.
+*/
+let activeBooster = null;            // 'hammer' | null
+const hammerBtn = document.getElementById('btn-hammer');
+const shakeBtn  = document.getElementById('btn-shake');
+const rainbowBtn = document.getElementById('btn-rainbow');
+const undoBtn = document.getElementById('btn-undo');
+const boosterHint = document.getElementById('booster-hint');
+
+function refreshBoosterHUD() {
+  const hc = document.getElementById('hammer-count');
+  const sc = document.getElementById('shake-count');
+  const rc = document.getElementById('rainbow-count');
+  const uc = document.getElementById('undo-count');
+  const hams = state.hammers || 0;
+  const shks = state.shakes  || 0;
+  const rbs  = state.rainbows || 0;
+  const uds  = state.undos    || 0;
+  hc.textContent = hams; sc.textContent = shks; rc.textContent = rbs;
+  // Undo badge shows 0 (and disables) when there's no snapshot to undo,
+  // regardless of inventory. Players see at a glance "undo is not
+  // available right now" even if they have charges in the pocket.
+  uc.textContent = undoSnapshot ? uds : 0;
+  hc.classList.toggle('zero', hams <= 0);
+  sc.classList.toggle('zero', shks <= 0);
+  rc.classList.toggle('zero', rbs <= 0);
+  uc.classList.toggle('zero', !undoSnapshot || uds <= 0);
+  hammerBtn.classList.toggle('disabled', hams <= 0);
+  shakeBtn.classList.toggle('disabled',  shks <= 0);
+  rainbowBtn.classList.toggle('disabled', rbs <= 0 && !pendingRainbow);
+  // Undo is special: requires BOTH an undoSnapshot AND a charge. Either
+  // missing → disabled style.
+  undoBtn.classList.toggle('disabled', uds <= 0 || !undoSnapshot);
+  hammerBtn.classList.toggle('active', activeBooster === 'hammer');
+  rainbowBtn.classList.toggle('active', pendingRainbow);
+  document.body.classList.toggle('booster-mode-active', activeBooster !== null);
+  boosterHint.style.display = activeBooster === 'hammer' ? '' : 'none';
+}
+
+// Map booster kind → single-shot SKU. Tapping an empty booster
+// jumps STRAIGHT to Telegram's Stars payment sheet via buySku() —
+// no intermediate popup. Player feedback: "direct purchase fast,
+// no popup."
+const BOOSTER_SINGLE_SKU = {
+  hammer:  'hammer_single',
+  shake:   'shake_single',
+  rainbow: 'rainbow_single',
+  undo:    'undo_single',
+};
+function quickBuyBooster(kind) {
+  const sku = BOOSTER_SINGLE_SKU[kind];
+  if (!sku) return;
+  if (typeof MX !== 'undefined' && MX.ready) MX.track('Booster Quick Buy', { kind, sku });
+  buySku(sku);
+}
+
+function setActiveBooster(name) {
+  activeBooster = name;
+  refreshBoosterHUD();
+}
+
+hammerBtn.addEventListener('click', () => {
+  if ((state.hammers || 0) <= 0) {
+    if (typeof MX !== 'undefined') MX.track('Booster Tap Empty', { kind: 'hammer' });
+    quickBuyBooster('hammer');
+    return;
+  }
+  if (!running) return;
+  setActiveBooster(activeBooster === 'hammer' ? null : 'hammer');
+  tgHaptic('select');
+});
+
+shakeBtn.addEventListener('click', () => {
+  if ((state.shakes || 0) <= 0) {
+    if (typeof MX !== 'undefined') MX.track('Booster Tap Empty', { kind: 'shake' });
+    quickBuyBooster('shake');
+    return;
+  }
+  if (!running) return;
+  state.shakes--;
+  doShake();
+  save(); refreshBoosterHUD();
+  tgHaptic('medium');
+  if (typeof MX !== 'undefined') MX.track('Booster Used', { kind: 'shake' });
+});
+
+rainbowBtn.addEventListener('click', () => {
+  if (!running) return;
+  // Toggle: if already armed, cancel and refund the charge.
+  if (pendingRainbow) {
+    pendingRainbow = false;
+    if (carrier && carrier.rainbow) {
+      carrier.rainbow = false;
+      carrier.r = TIER_RADII[carrier.tier];
+    }
+    refreshBoosterHUD();
+    toast('Rainbow cancelled');
+    return;
+  }
+  if ((state.rainbows || 0) <= 0) {
+    if (typeof MX !== 'undefined') MX.track('Booster Tap Empty', { kind: 'rainbow' });
+    quickBuyBooster('rainbow');
+    return;
+  }
+  state.rainbows--;
+  pendingRainbow = true;
+  // Promote the current carrier immediately so player sees the effect now.
+  if (carrier) {
+    carrier.rainbow = true;
+    carrier.r = TIER_RADII[4];
+    // Re-clamp x so the larger doll still fits inside the jar walls
+    carrier.x = clamp(carrier.x, JAR.left + carrier.r + 4, JAR.right - carrier.r - 4);
+    pendingRainbow = false;  // already applied to current carrier
+  }
+  save(); refreshBoosterHUD();
+  tgHaptic('medium');
+  toast('🌈 Rainbow doll armed — drop it on any doll!');
+  if (typeof MX !== 'undefined') MX.track('Booster Used', { kind: 'rainbow' });
+});
+
+// Death-line grace period — during a shake event, suppress game-over
+// even if dolls fly above the line. Set when the shake fires.
+let shakeBoostUntilMs = 0;
+
+function applyShakePulse(hMag, vMag) {
+  for (const b of world) {
+    if (b.merged) continue;
+    // Strong random horizontal kick + meaningful upward toss + spin
+    b.vx += (Math.random() - 0.5) * hMag * 2;
+    b.vy -= Math.random() * vMag + 1.5;
+    b.spin += (Math.random() - 0.5) * 0.20;
+    // Tiny positional jitter helps stuck same-tier dolls separate so
+    // collisions can actually re-fire and trigger merges.
+    b.x += (Math.random() - 0.5) * 4;
+    b.y += (Math.random() - 0.5) * 2;
+  }
+}
+
+function doShake() {
+  // v0.3.18 — multi-pulse shake. The old single impulse was too gentle to
+  // actually rearrange a settled stack. Now we fire 5 pulses over ~700ms
+  // with diminishing magnitude, plus continuous screen-shake. Same-tier
+  // dolls that get knocked together by the chaos actually merge.
+  shakeBoostUntilMs = performance.now() + 900;
+  // First pulse — biggest, like the player physically tipped the jar
+  applyShakePulse(22, 7);
+  kickShake(26);
+  setTimeout(() => { if (running) { applyShakePulse(18, 5); kickShake(22); } }, 130);
+  setTimeout(() => { if (running) { applyShakePulse(16, 4); kickShake(18); } }, 270);
+  setTimeout(() => { if (running) { applyShakePulse(12, 3); kickShake(14); } }, 420);
+  setTimeout(() => { if (running) { applyShakePulse(8,  2); kickShake(10); } }, 580);
+  // Reset every doll's death-line countdown — grace is also extended via
+  // shakeBoostUntilMs but resetting the per-doll counter prevents a doll
+  // that was ALREADY in the danger zone before the shake from instantly
+  // ending the game when shakeBoostUntilMs elapses.
+  for (const b of world) b.restingFrames = 0;
+  // Layered audio cue — rolling thunder
+  tone(95,  0.50, 'sawtooth', 0.14);
+  setTimeout(() => tone(140, 0.45, 'sawtooth', 0.12), 140);
+  setTimeout(() => tone(190, 0.40, 'sawtooth', 0.10), 290);
+  setTimeout(() => tone(260, 0.30, 'triangle', 0.10), 450);
+  setTimeout(() => tone(340, 0.20, 'triangle', 0.08), 600);
+}
+
+// Hammer mode hits — intercept canvas pointerdown when active.
+function handleHammerHit(e) {
+  if (activeBooster !== 'hammer') return false;
+  const rect = canvas.getBoundingClientRect();
+  const px = (e.clientX - rect.left) * (360 / rect.width);
+  const py = (e.clientY - rect.top)  * (540 / rect.height);
+  // Find topmost body whose disk contains the tap point. Iterate in
+  // reverse render order so the visually-on-top doll wins.
+  const sorted = world.slice().sort((a, b) => b.tier - a.tier);
+  for (const b of sorted) {
+    if (b.merged) continue;
+    const dx = px - b.x, dy = py - b.y;
+    if (dx * dx + dy * dy <= b.r * b.r) {
+      // Boom.
+      spawnParticles(b.x, b.y, 18 + b.tier * 3, getPalette(b.tier).body, 1.3);
+      spawnParticles(b.x, b.y, 8, '#fdc500', 1.5);
+      b.merged = true;
+      kickShake(6);
+      tone(330, 0.10, 'triangle', 0.12);
+      setTimeout(() => tone(165, 0.18, 'sawtooth', 0.10), 60);
+      state.hammers = Math.max(0, (state.hammers || 0) - 1);
+      setActiveBooster(null);
+      save();
+      if (typeof MX !== 'undefined') MX.track('Booster Used', { kind: 'hammer', target_tier: b.tier });
+      // Sweep the merged bodies out
+      for (let i = world.length - 1; i >= 0; i--) if (world[i].merged) world.splice(i, 1);
+      tgHaptic('medium');
+      return true;
+    }
+  }
+  // Missed — cancel hammer mode without charging.
+  setActiveBooster(null);
+  toast('Cancelled');
+  return true;
+}
+
 // Prevent default touch behavior on the canvas
 canvas.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
 canvas.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
 
 function renderNext() {
-  const c = nextCtx;
-  c.clearRect(0, 0, nextCanvas.width, nextCanvas.height);
-  const r = Math.min(nextCanvas.width, nextCanvas.height) * 0.36;
-  drawMatryoshka(c, nextCanvas.width / 2, nextCanvas.height / 2 + 2, r, nextTier, 0, 1);
+  const cssW = 44, cssH = 44;
+  const c = ensureHiDPI(nextCanvas, cssW, cssH);
+  c.clearRect(0, 0, cssW, cssH);
+  const r = Math.min(cssW, cssH) * 0.36;
+  drawMatryoshka(c, cssW / 2, cssH / 2 + 2, r, nextTier, 0, 1);
 }
 
 /* =========================================================
@@ -2421,8 +3819,8 @@ function stepMascot() {
 }
 
 function drawMascot() {
-  const c = mascotCtx;
-  const W = mascotCanvas.width, H = mascotCanvas.height;
+  const W = 68, H = 80;  // logical size
+  const c = ensureHiDPI(mascotCanvas, W, H);
   c.clearRect(0, 0, W, H);
   const bob = Math.sin(mascotPhase) * 1.6;
   const squash = mascotSquash;
@@ -2510,20 +3908,45 @@ function playComboSound(combo) {
    [JS-10] Game over detection
    ========================================================= */
 function checkGameOver() {
+  // Grace period: during a shake event, dolls are flying everywhere and
+  // some will momentarily cross the death line. Suppress game-over for
+  // ~900ms after a shake fires so the player isn't punished for using
+  // the booster. Per-doll restingFrames are also zeroed in doShake().
+  if (performance.now() < shakeBoostUntilMs) {
+    dangerLevel = 0;
+    for (const b of world) b.restingFrames = 0;
+    return;
+  }
+  // Death rule: any doll whose "upper-body" point sits above the death line
+  // for DEATH_FRAMES consecutive frames triggers game over.
+  //
+  // Earlier versions required the doll to ALSO be "resting" (velocity below
+  // a tight threshold) before counting frames. That was wrong — stacked
+  // dolls are constantly jittering from gravity + body-body collisions, so
+  // the resting check almost never passed and the counter never accumulated.
+  // Now we only check geometry. When a doll bobs out of the danger zone, we
+  // decay the counter (rather than hard-reset) so a doll teetering in and
+  // out can't game the system, but a clear drop below the line still
+  // recovers within ~30 frames.
+  let maxFrames = 0;
   for (const b of world) {
     if (b.merged) continue;
-    const isResting = Math.abs(b.vy) < 0.35 && Math.abs(b.vx) < 0.6;
-    const isAboveLine = b.y - b.r * 0.4 < JAR.deathLineY;
-    if (isResting && isAboveLine) {
+    // Trigger when ~20% of the body sits above the death line.
+    const isAboveLine = (b.y - b.r * 0.4) < JAR.deathLineY;
+    if (isAboveLine) {
       b.restingFrames++;
       if (b.restingFrames > DEATH_FRAMES) {
+        dangerLevel = 1;
         endGame();
         return;
       }
     } else {
-      b.restingFrames = 0;
+      b.restingFrames = Math.max(0, b.restingFrames - 2);
     }
+    if (b.restingFrames > maxFrames) maxFrames = b.restingFrames;
   }
+  // Feed the visual pulse on the death line — exposed as 0..1.
+  dangerLevel = Math.min(1, maxFrames / DEATH_FRAMES);
 }
 
 function endGame() {
@@ -2552,56 +3975,328 @@ function endGame() {
     if (wasBest) state.best = score;
   }
   document.getElementById('best-score').textContent = state.mode === 'daily' ? (state.dailyBestToday || 0) : (state.best || 0);
+  // Season pass: addSeasonPoints fired live inside addScore() during the
+  // game, so state.season.points is already current. seasonPointsBeforeGame
+  // was captured at newGame() so the snapshot animates from before→after.
+  ensureSeasonFresh();
+  refreshSeasonStrip();
   checkAchievements();
+  // Analytics: Game Ended with all the key signals for cohort analysis
+  if (typeof MX !== 'undefined' && MX.ready) {
+    const durSec = Math.round((performance.now() - gameStartedAtMs) / 1000);
+    MX.track('Game Ended', {
+      mode: state.mode || 'endless',
+      score: score,
+      merges: mergeCount,
+      best_tier_this_run: Math.max(0, ...world.map(b => b.tier), state.bestTierEver || 0),
+      duration_sec: durSec,
+      revived: gameRevived,
+      new_best: !!wasBest,
+      best_combo_this_run: state.bestComboEver || 0,
+    });
+    MX.incrementProfile({
+      total_games_ever: 1,
+      lifetime_score: score,
+    });
+    MX.setProfile({
+      last_played_at: new Date().toISOString(),
+      best_score: state.best || 0,
+      best_tier: state.bestTierEver || 0,
+      streak: state.streak || 0,
+      total_games_ever: state.totalGamesEver || 0,
+      total_merges_ever: state.totalMergesEver || 0,
+    });
+  }
   save();
   submitScore(score);
   setTimeout(() => showGameOverModal(wasBest), 350);
 }
 
 function showGameOverModal(wasBest) {
-  const canRevive = (state.revives || 0) > 0;
+  const hasFreeRevive = (state.revives || 0) > 0;
+  // Only suppress the paid button when we definitely cannot offer IAP
+  // (i.e., running in a regular browser, no Telegram WebApp at all).
+  // The old (tg && getInitData()) check was too strict — initData can
+  // be transiently empty on some Telegram clients even when openInvoice
+  // would still work. Now: if tg exists, show the button. buyRevive()
+  // gracefully toasts an error if the invoice can't be created.
+  const canPaidRevive = !!tg;
+  const paidPrice = (paidRevivesUsedThisRun + 1) * 25;
   const body = document.getElementById('modal-body');
+
+  // Always offer a revive path: free inventory first, then escalating
+  // Stars price (25, 50, 75, …) per paid revive in the current run.
+  let reviveBtn = '';
+  if (hasFreeRevive) {
+    reviveBtn = `<button class="btn revive" id="m-revive-free">🟢 ${t('use_revive')} (${state.revives})</button>`;
+  } else if (canPaidRevive) {
+    const tmpl = t('revive_for_stars') || 'Revive for {n} ⭐';
+    reviveBtn = `<button class="btn revive" id="m-revive-paid">🟢 ${tmpl.replace('{n}', paidPrice)}</button>`;
+  }
+
+  // Build the Season Pass snapshot — bar starts at the pre-game position
+  // and we animate it to the post-game position after the modal renders.
+  const pointsBefore = seasonPointsBeforeGame || 0;
+  const pointsAfter = (state.season && state.season.points) || 0;
+  const delta = Math.max(0, pointsAfter - pointsBefore);
+  const startPct = Math.min(100, (pointsBefore / SEASON_TOTAL_TARGET) * 100);
+  // Count newly-claimable steps (threshold crossed THIS game OR unclaimed earlier
+  // steps the player is already eligible for).
+  const claimableNow = countSeasonClaimable(pointsAfter);
+  const newlyCrossed = SEASON_PASS_STEPS.filter(st =>
+    st.threshold > pointsBefore && st.threshold <= pointsAfter
+  ).length;
+  // Find next-step threshold for the readout
+  const nextStep = SEASON_PASS_STEPS.find(st => pointsAfter < st.threshold);
+  const ssText = pointsAfter.toLocaleString() + ' / ' +
+    (nextStep ? nextStep.threshold.toLocaleString() : SEASON_TOTAL_TARGET.toLocaleString()) +
+    (nextStep ? ' to next step' : ' · MAX!');
+  const claimRowHtml = claimableNow > 0
+    ? `<div class="snapshot-claim-row">
+         <span>🎁 ${claimableNow} reward${claimableNow === 1 ? '' : 's'} ready!</span>
+         <span class="arrow">View →</span>
+       </div>`
+    : '';
+  const snapshotHtml = `
+    <div class="season-snapshot" id="game-over-snapshot">
+      <div class="snapshot-header">
+        <span>🎟 Season Pass</span>
+        <span class="snapshot-delta ${delta > 0 ? '' : 'zero'}">+${delta.toLocaleString()}</span>
+      </div>
+      <div class="snapshot-bar-shell">
+        <div class="snapshot-bar-fill" id="snapshot-bar-fill" style="width:${startPct.toFixed(1)}%"></div>
+      </div>
+      <div class="snapshot-text" id="snapshot-text">${ssText}</div>
+      ${claimRowHtml}
+    </div>
+  `;
   body.innerHTML = `
     <h3>${wasBest ? '🎉 ' + t('new_high') : t('game_over')}</h3>
     <div class="big">${score}</div>
     <div class="sub">${t('your_best')}: ${state.best}</div>
     <div class="modal-btns">
-      ${canRevive ? `<button class="btn revive" id="m-revive">🟢 ${t('use_revive')} (${state.revives})</button>` : ''}
+      ${reviveBtn}
       <button class="btn" id="m-newgame">🪆 ${t('play_again')}</button>
       <button class="btn ghost" id="m-share">📤 Share</button>
     </div>
+    ${snapshotHtml}
   `;
-  document.getElementById('modal-shade').classList.add('show');
-  if (canRevive) {
-    document.getElementById('m-revive').onclick = () => {
+  // Lock the backdrop — game over should be terminal-action only. Player
+  // must explicitly tap revive / play again / share to dismiss. Accidental
+  // backdrop taps shouldn't drop them onto a frozen game with the modal
+  // gone and no way to continue.
+  const shade = document.getElementById('modal-shade');
+  shade.classList.add('show');
+  shade.classList.add('locked');
+  if (hasFreeRevive) {
+    document.getElementById('m-revive-free').onclick = () => {
       state.revives--;
       save();
       hideModal();
       doRevive();
     };
+  } else if (canPaidRevive) {
+    document.getElementById('m-revive-paid').onclick = () => buyRevive(paidPrice);
   }
   document.getElementById('m-newgame').onclick = () => { hideModal(); newGame(); };
   document.getElementById('m-share').onclick = () => shareScore();
+  // Season Pass snapshot — tapping opens the full Season modal on top
+  // of the game-over modal. Game-over stays underneath (modal-shade has
+  // z-index 90, season-shade 95) so the player can close the season
+  // modal and return to revive / play-again options without losing
+  // their place.
+  const snapshotEl = document.getElementById('game-over-snapshot');
+  if (snapshotEl) {
+    snapshotEl.onclick = () => {
+      if (typeof MX !== 'undefined' && MX.ready) MX.track('Season Modal Opened', { source: 'game_over_snapshot' });
+      openSeasonModal();
+    };
+  }
+  // Animate the snapshot progress bar from points-before to points-after
+  // with ticking SFX. Slight delay so the modal-in animation has settled.
+  setTimeout(() => {
+    animateSeasonSnapshot(pointsBefore, pointsAfter, newlyCrossed);
+  }, 380);
+  if (typeof MX !== 'undefined' && MX.ready) {
+    MX.track('Season Snapshot Shown', {
+      points_before: pointsBefore, points_after: pointsAfter, delta,
+      newly_crossed: newlyCrossed, claimable_now: claimableNow,
+    });
+  }
+  // Analytics — track that we OFFERED the revive (impression). Helps
+  // compute the offer→purchase conversion rate in Mixpanel.
+  if (typeof MX !== 'undefined' && MX.ready) {
+    MX.track('Game Over Modal Shown', {
+      score, mode: state.mode || 'endless',
+      has_free_revive: hasFreeRevive,
+      offered_paid_price: hasFreeRevive ? 0 : paidPrice,
+      paid_revives_used_this_run: paidRevivesUsedThisRun,
+    });
+  }
+}
+
+// Paid revive flow — invoice from /api/create-revive-invoice, openInvoice,
+// poll for the instant_revive grant, doRevive on success.
+async function buyRevive(expectedPrice) {
+  const initData = getInitData();
+  if (!initData || !tg) { toast(t('iap_unavailable')); return; }
+  if (typeof MX !== 'undefined' && MX.ready) {
+    MX.track('Revive Buy Tapped', {
+      paid_revives_used_this_run: paidRevivesUsedThisRun,
+      price_stars: expectedPrice,
+    });
+  }
+  try {
+    const r = await fetch('/api/create-revive-invoice', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        initData,
+        revivesUsed: paidRevivesUsedThisRun,
+        admin_test_price: isAdmin && adminTestPrices,
+      }),
+    });
+    const d = await r.json();
+    if (!d.link) { toast(d.error || 'IAP error'); return; }
+    if (typeof MX !== 'undefined' && MX.ready) MX.track('Revive Invoice Opened', { price_stars: d.amount });
+    tg.openInvoice(d.link, async (status) => {
+      if (status === 'paid') {
+        for (let i = 0; i < 8; i++) {
+          await sleep(400);
+          const rr = await fetch('/api/poll-purchases', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ initData }),
+          });
+          const dd = await rr.json();
+          if (dd.purchases && dd.purchases.length) {
+            for (const p of dd.purchases) {
+              if (p.grant && p.grant.instant_revive) {
+                paidRevivesUsedThisRun++;
+                state.totalIapsEver = (state.totalIapsEver || 0) + 1;
+                save();
+                hideModal();
+                setTimeout(() => doRevive(), 80);
+                if (typeof MX !== 'undefined' && MX.ready) {
+                  MX.track('Revive Purchased', {
+                    price_stars: p.grant.paid_stars || d.amount,
+                    paid_revives_used_this_run: paidRevivesUsedThisRun,
+                  });
+                  MX.incrementProfile({
+                    total_iaps_ever: 1,
+                    total_stars_spent: p.grant.paid_stars || d.amount,
+                    total_paid_revives: 1,
+                  });
+                }
+              } else {
+                applyGrant(p.grant);
+              }
+            }
+            return;
+          }
+        }
+        // No grant came through in 8 polls — surface a soft error so
+        // the player knows to retry rather than just sit there.
+        toast(t('revive_pending') || 'Revive pending — tap again if needed');
+      } else if (status === 'failed') {
+        toast('Payment failed');
+        if (typeof MX !== 'undefined' && MX.ready) MX.track('Revive Failed', { price_stars: d.amount });
+      } else if (status === 'cancelled') {
+        if (typeof MX !== 'undefined' && MX.ready) MX.track('Revive Cancelled', { price_stars: d.amount });
+      }
+    });
+  } catch (e) { toast('Network error'); }
 }
 
 function doRevive() {
-  // Clear the top 3 dolls that are highest in the jar
-  const sorted = world.slice().sort((a, b) => a.y - b.y);
-  const toClear = sorted.slice(0, 3);
+  // v0.3.28 — revive clears roughly HALF the dolls instead of just 3.
+  // Old logic was way too stingy for a 25⭐ purchase (or even a free
+  // inventory revive); player paid to continue and got 3 dolls cleared,
+  // immediately landing back in the death zone.
+  //
+  // New logic in two passes:
+  //   1. Every doll in the danger zone (any part above death line) is
+  //      cleared FIRST — guarantees survival, otherwise the revive
+  //      could fail to remove the threat and instantly re-game-over.
+  //   2. If that doesn't hit half-of-world yet, fill the remaining
+  //      quota with random non-danger dolls.
+  // So total cleared ≥ half, more if the danger zone was busy.
+  const n = world.length;
+  const halfTarget = Math.max(3, Math.ceil(n / 2));   // never less than 3 even on tiny jars
+
+  const dangerDolls = world.filter(b => !b.merged && (b.y - b.r * 0.4) < JAR.deathLineY);
+  const dangerSet = new Set(dangerDolls);
+
+  const safeDolls = world.filter(b => !b.merged && !dangerSet.has(b));
+  // Fisher-Yates shuffle of the safe list
+  for (let i = safeDolls.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = safeDolls[i]; safeDolls[i] = safeDolls[j]; safeDolls[j] = tmp;
+  }
+  const remaining = Math.max(0, halfTarget - dangerDolls.length);
+  const randomDolls = safeDolls.slice(0, remaining);
+  const toClear = dangerDolls.concat(randomDolls);
+
+  // Big particle burst on each cleared doll — celebrate the second-chance
   for (const b of toClear) {
-    spawnParticles(b.x, b.y, 22, getPalette(b.tier).body, 1.2);
+    spawnParticles(b.x, b.y, 26, getPalette(b.tier).body, 1.4);
+    spawnParticles(b.x, b.y, 8, '#fdc500', 1.6);
     b.merged = true;
   }
+  // Crown the revive with a center-of-jar gold flash + screen shake
+  const cx = (JAR.left + JAR.right) / 2;
+  const cy = (JAR.top + JAR.bottom) / 2;
+  spawnParticles(cx, cy, 32, '#fdc500', 1.8);
+  spawnParticles(cx, cy, 18, '#4ad3ad', 1.4);
+
   for (let i = world.length - 1; i >= 0; i--) if (world[i].merged) world.splice(i, 1);
-  // Reset resting frames on remaining
   for (const b of world) b.restingFrames = 0;
+  dangerLevel = 0;
+  kickShake(20);
+
   running = true;
+  gameRevived = true;
   carrier = null;
   spawnCarrier();
-  toast(t('revive_used'));
+  toast(t('revive_used') + ' · ' + toClear.length + ' cleared');
+  // Layered triumphant audio
+  tone(440, 0.10, 'triangle', 0.14);
+  setTimeout(() => tone(660, 0.10, 'triangle', 0.14), 80);
+  setTimeout(() => tone(880, 0.18, 'triangle', 0.14), 160);
+  setTimeout(() => tone(1320, 0.22, 'sine', 0.12), 260);
+
+  if (typeof MX !== 'undefined' && MX.ready) {
+    MX.track('Booster Used', {
+      kind: 'revive',
+      cleared: toClear.length,
+      danger_cleared: dangerDolls.length,
+      random_cleared: randomDolls.length,
+      world_size_before: n,
+    });
+  }
 }
 
 function newGame() {
+  // Capture the pre-game season points so the game-over snapshot can
+  // show the delta accumulated during this run. Season points now
+  // accumulate live in addScore() so by end-game state.season.points
+  // is already current — we need the BEFORE value snapshotted here.
+  ensureSeasonFresh();
+  seasonPointsBeforeGame = (state.season && state.season.points) || 0;
+  // Analytics: Game Started — track mode + cumulative context so we
+  // can compute average score / tier / duration per session in Mixpanel.
+  if (typeof MX !== 'undefined' && MX.ready) {
+    MX.track('Game Started', {
+      mode: state.mode || 'endless',
+      revives_in_pocket: state.revives || 0,
+      hammers_in_pocket: state.hammers || 0,
+      shakes_in_pocket: state.shakes || 0,
+      rainbows_in_pocket: state.rainbows || 0,
+      undos_in_pocket: state.undos || 0,
+    });
+    MX.setSuper({ mode: state.mode || 'endless' });
+  }
+  gameStartedAtMs = performance.now();
+  gameRevived = false;
+  paidRevivesUsedThisRun = 0;
   world.length = 0;
   particles.length = 0;
   floats.length = 0;
@@ -2628,7 +4323,24 @@ function newGame() {
    [JS-11] HUD + tier dots
    ========================================================= */
 function hudUpdate() {
-  document.getElementById('gems-count').textContent = state.gems || 0;
+  refreshBoosterHUD();
+  const gemsEl = document.getElementById('gems-count');
+  const prevGems = parseInt(gemsEl.textContent, 10) || 0;
+  const newGems = state.gems || 0;
+  gemsEl.textContent = newGems;
+  // Pulse the gem pill when gems increase. Hides the topbar limitation:
+  // even when the player is on Shop/Earn (where the topbar isn't visible),
+  // the next time they swap back to Home they'll see the new total — and
+  // when they ARE on Home, they get a satisfying pulse animation.
+  if (newGems > prevGems) {
+    const pill = document.getElementById('gems-pill');
+    if (pill) {
+      pill.classList.remove('pulse', 'pulse-up');
+      void pill.offsetWidth;          // force reflow so animation re-fires
+      pill.classList.add('pulse', 'pulse-up');
+      setTimeout(() => pill.classList.remove('pulse-up'), 600);
+    }
+  }
   document.getElementById('streak-count').textContent = state.streak || 0;
   document.getElementById('best-score').textContent = state.mode === 'daily'
     ? (state.dailyYMD === dailyYMD ? (state.dailyBestToday || 0) : 0)
@@ -2676,9 +4388,11 @@ function switchTab(name) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-tab') === name));
   state.activeTab = name;
   save();
+  if (typeof MX !== 'undefined' && MX.ready) MX.track('Tab View', { tab: name });
   if (name === 'shop') renderShop();
   if (name === 'earn') {
     renderBattlePassBanner();
+    renderSpinSection();
     fetchTournament();
     renderChest();
     renderMilestones();
@@ -2686,6 +4400,7 @@ function switchTab(name) {
     renderAchievements();
     fetchLeaderboard(currentLbMode);
   }
+  if (name === 'home') refreshSeasonStrip();
   if (name === 'home') setTimeout(fitCanvas, 30);
   tgHaptic('select');
 }
@@ -2705,6 +4420,14 @@ const SKU_DISPLAY = [
     title_key: 'Next-Doll Previews ×10', desc: 'See 2 dolls ahead for 10 drops' },
   { id: 'undo_pack',     icon: '↩️', price: 60,
     title_key: 'Undo Pack ×5', desc: 'Take back your last drop, 5 times' },
+  { id: 'hammer_pack',   icon: '🔨', price: 80,
+    title_key: 'Hammer ×5', desc: 'Tap any doll to remove it instantly' },
+  { id: 'shake_pack',    icon: '🌀', price: 60,
+    title_key: 'Shake ×5', desc: 'Jostle the jar to dislodge stuck stacks' },
+  { id: 'rainbow_pack',  icon: '🌈', price: 120,
+    title_key: 'Rainbow Doll ×3', desc: 'Merges with ANY size — instant level-up' },
+  { id: 'booster_bundle',icon: '🎒', price: 299, feature: true,
+    title_key: 'Booster Bundle', desc: '5 hammers + 5 shakes + 2 rainbows + 5 undos + 2 revives' },
   { id: 'gems_small',    icon: '💎', price: 99,
     title_key: '500 Gems', desc: 'Small pile of gems' },
   { id: 'gems_big',      icon: '💰', price: 399,
@@ -2725,38 +4448,160 @@ const SKU_DISPLAY = [
     title_key: 'Season Pass · 30 days', desc: '2× daily rewards + skin + bonus' },
 ];
 
+// Gem store — accumulated gems get a real spend path. Pricing is 10× the
+// equivalent Stars price (1 ⭐ ≈ 10 💎). Single-shot boosters + revive are
+// the most useful in-game items, so this is where gems pay off. Packs,
+// skins, and season-pass premium stay Stars-only — Stars stay premium.
+const GEM_SHOP_ITEMS = [
+  { id: 'revive_oneshot_gems', icon: '🟢', gems: 250, title: 'Revive · ×1', desc: 'Clear top dolls, keep playing', grant: { revives: 1 } },
+  { id: 'hammer_single_gems',  icon: '🔨', gems: 200, title: 'Hammer · ×1', desc: 'Tap a doll to remove it',       grant: { hammers: 1 } },
+  { id: 'shake_single_gems',   icon: '🌀', gems: 150, title: 'Shake · ×1',  desc: 'Jostle every doll in the jar',   grant: { shakes: 1 } },
+  { id: 'undo_single_gems',    icon: '↶',  gems: 150, title: 'Undo · ×1',   desc: 'Take back your last drop',       grant: { undos: 1 } },
+  { id: 'rainbow_single_gems', icon: '🌈', gems: 450, title: 'Rainbow · ×1', desc: 'Merges with any size',          grant: { rainbows: 1 } },
+];
+
+// Admin state — populated by /api/admin/whoami on boot. Server validates
+// initData and only returns admin:true for allow-listed Telegram IDs, so
+// the UI flag is purely cosmetic; the price override is enforced server-
+// side regardless of what the client claims.
+let isAdmin = false;
+let adminTestPrices = true;   // default ON when admin so smoke testing is one tap away
+
+async function fetchAdminStatus() {
+  try {
+    const initData = getInitData();
+    if (!initData) return;
+    const r = await fetch('/api/admin/whoami', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ initData }),
+    });
+    const d = await r.json();
+    isAdmin = !!(d && d.admin);
+    // Show the toggle bar + re-render shop so the prices reflect mode.
+    refreshAdminUI();
+  } catch (e) {}
+}
+
+function refreshAdminUI() {
+  const bar = document.getElementById('admin-toggle-bar');
+  if (bar) bar.classList.toggle('show', isAdmin);
+  document.getElementById('admin-mode-test').classList.toggle('active', isAdmin && adminTestPrices);
+  document.getElementById('admin-mode-real').classList.toggle('active', isAdmin && !adminTestPrices);
+}
+
+document.getElementById('admin-mode-test').addEventListener('click', () => {
+  if (!isAdmin) return;
+  adminTestPrices = true; refreshAdminUI(); renderShop();
+});
+document.getElementById('admin-mode-real').addEventListener('click', () => {
+  if (!isAdmin) return;
+  adminTestPrices = false; refreshAdminUI(); renderShop();
+});
+
 function renderShop() {
+  if (typeof MX !== 'undefined' && MX.ready) MX.track('Shop Viewed', { admin_test_mode: isAdmin && adminTestPrices });
+  refreshAdminUI();
+  const useAdminPrice = isAdmin && adminTestPrices;
   const grid = document.getElementById('sku-grid');
   grid.innerHTML = '';
   for (const s of SKU_DISPLAY) {
     const card = document.createElement('div');
     card.className = 'sku-card' + (s.feature ? ' feature' : '');
+    const displayedPrice = useAdminPrice ? 1 : s.price;
+    const priceLabel = useAdminPrice
+      ? `1 <span class="star">⭐</span> <span style="opacity:0.75;font-size:10px">(was ${s.price})</span>`
+      : `${s.price} <span class="star">⭐</span>`;
     card.innerHTML = `
       <div class="sku-icon">${s.icon}</div>
       <div class="sku-title">${s.title_key}</div>
       <div class="sku-desc">${s.desc}</div>
-      <button class="sku-buy" data-sku="${s.id}">${s.price} <span class="star">⭐</span></button>
+      <button class="sku-buy ${useAdminPrice ? 'admin-price' : ''}" data-sku="${s.id}">${priceLabel}</button>
     `;
     grid.appendChild(card);
   }
   grid.querySelectorAll('.sku-buy').forEach(b => {
     b.onclick = () => buySku(b.getAttribute('data-sku'));
   });
+  renderGemShop();
+}
+
+function renderGemShop() {
+  const grid = document.getElementById('gem-sku-grid');
+  if (!grid) return;
+  const have = state.gems || 0;
+  document.getElementById('gem-shop-balance').textContent = have.toLocaleString();
+  grid.innerHTML = '';
+  for (const item of GEM_SHOP_ITEMS) {
+    const affordable = have >= item.gems;
+    const card = document.createElement('div');
+    card.className = 'sku-card gem-card' + (affordable ? '' : ' not-enough');
+    card.innerHTML = `
+      <div class="sku-icon">${item.icon}</div>
+      <div class="sku-title">${item.title}</div>
+      <div class="sku-desc">${item.desc}</div>
+      <button class="sku-buy gem-buy ${affordable ? '' : 'disabled'}" data-gem-sku="${item.id}">
+        ${item.gems} <span class="gem">💎</span>
+      </button>
+    `;
+    grid.appendChild(card);
+  }
+  grid.querySelectorAll('.gem-buy').forEach(b => {
+    b.onclick = () => buyWithGems(b.getAttribute('data-gem-sku'));
+  });
+}
+
+function buyWithGems(skuId) {
+  const item = GEM_SHOP_ITEMS.find(x => x.id === skuId);
+  if (!item) return;
+  const have = state.gems || 0;
+  if (have < item.gems) {
+    toast('Need ' + (item.gems - have).toLocaleString() + ' more 💎');
+    if (typeof MX !== 'undefined' && MX.ready) {
+      MX.track('Gem Purchase Insufficient', { sku: skuId, cost: item.gems, have });
+    }
+    tgHaptic('warning');
+    return;
+  }
+  state.gems = have - item.gems;
+  applyGrant(item.grant);
+  save(); hudUpdate(); renderGemShop();
+  toast('+ ' + item.title);
+  playClaimSound();
+  tgHaptic('success');
+  if (typeof MX !== 'undefined' && MX.ready) {
+    MX.track('Gem Purchase', {
+      sku: skuId, cost: item.gems, gems_remaining: state.gems,
+      grant_summary: JSON.stringify(item.grant),
+    });
+    MX.incrementProfile({ total_gem_purchases: 1, total_gems_spent: item.gems });
+  }
 }
 
 async function buySku(sku) {
   const initData = getInitData();
-  if (!initData || !tg) { toast(t('iap_unavailable')); return; }
+  const skuMeta = SKU_DISPLAY.find(s => s.id === sku) || { price: 0 };
+  if (typeof MX !== 'undefined' && MX.ready) {
+    MX.track('IAP Buy Tapped', { sku, price_stars: skuMeta.price });
+  }
+  if (!initData || !tg) {
+    toast(t('iap_unavailable'));
+    if (typeof MX !== 'undefined' && MX.ready) MX.track('IAP Unavailable', { sku });
+    return;
+  }
   try {
     const r = await fetch('/api/create-invoice', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sku, initData }),
+      body: JSON.stringify({ sku, initData, admin_test_price: isAdmin && adminTestPrices }),
     });
     const d = await r.json();
-    if (!d.link) { toast(d.error || 'IAP error'); return; }
+    if (!d.link) {
+      toast(d.error || 'IAP error');
+      if (typeof MX !== 'undefined' && MX.ready) MX.track('IAP Invoice Failed', { sku, error: d.error || 'no link' });
+      return;
+    }
+    if (typeof MX !== 'undefined' && MX.ready) MX.track('IAP Invoice Opened', { sku, price_stars: skuMeta.price });
     tg.openInvoice(d.link, async (status) => {
       if (status === 'paid') {
-        // Poll for the grant payload
         for (let i = 0; i < 6; i++) {
           await sleep(400);
           const rr = await fetch('/api/poll-purchases', {
@@ -2774,11 +4619,30 @@ async function buySku(sku) {
         save();
         hudUpdate();
         tgHaptic('success');
+        if (typeof MX !== 'undefined' && MX.ready) {
+          MX.track('IAP Success', {
+            sku, price_stars: skuMeta.price, total_iaps_ever: state.totalIapsEver,
+          });
+          MX.incrementProfile({
+            total_iaps_ever: 1,
+            total_stars_spent: skuMeta.price || 0,
+          });
+          MX.setProfile({
+            last_iap_at: new Date().toISOString(),
+            last_iap_sku: sku,
+          });
+        }
       } else if (status === 'failed') {
         toast('Payment failed');
+        if (typeof MX !== 'undefined' && MX.ready) MX.track('IAP Failed', { sku, price_stars: skuMeta.price });
+      } else if (status === 'cancelled') {
+        if (typeof MX !== 'undefined' && MX.ready) MX.track('IAP Cancelled', { sku, price_stars: skuMeta.price });
       }
     });
-  } catch (e) { toast('Network error'); }
+  } catch (e) {
+    toast('Network error');
+    if (typeof MX !== 'undefined' && MX.ready) MX.track('IAP Network Error', { sku });
+  }
 }
 
 function applyGrant(g) {
@@ -2787,9 +4651,27 @@ function applyGrant(g) {
   if (g.revives)  state.revives  = (state.revives  || 0) + g.revives;
   if (g.previews) state.previews = (state.previews || 0) + g.previews;
   if (g.undos)    state.undos    = (state.undos    || 0) + g.undos;
+  if (g.hammers)  state.hammers  = (state.hammers  || 0) + g.hammers;
+  if (g.shakes)   state.shakes   = (state.shakes   || 0) + g.shakes;
+  if (g.rainbows) state.rainbows = (state.rainbows || 0) + g.rainbows;
   if (g.shieldDays) state.shieldDays = (state.shieldDays || 0) + g.shieldDays;
   if (g.skins) { state.skins = Array.from(new Set([...(state.skins || []), ...g.skins])); }
   if (g.battlePass) state.battlePassUntil = Date.now() + g.battlePass * 86400000;
+  if (g.seasonPremium) {
+    ensureSeasonFresh();
+    state.season.premium = true;
+    if (typeof MX !== 'undefined' && MX.ready) {
+      MX.track('Season Premium Bought', { season_week: state.season.weekId, points_at_buy: state.season.points });
+      MX.setProfile({ last_season_premium_week: state.season.weekId });
+    }
+    // Live-refresh fix (v0.3.37): when the player buys premium WHILE the
+    // Season modal is open, re-render the modal so the ★ PRO lanes
+    // immediately unlock and claim buttons appear — was requiring a
+    // manual close + reopen to see the new state.
+    const shade = document.getElementById('season-shade');
+    if (shade && shade.classList.contains('show')) renderSeasonPass();
+    refreshSeasonStrip();
+  }
   // Tournament prize payload — surface a celebratory toast / modal
   if (g.tournamentPrize) {
     const tp = g.tournamentPrize;
@@ -2863,6 +4745,9 @@ document.getElementById('chest-claim').onclick = () => {
   toast('+' + reward + ' 💎' + multiplierLabel(mult));
   playClaimSound();
   tgHaptic('success');
+  if (typeof MX !== 'undefined' && MX.ready) {
+    MX.track('Daily Chest Claimed', { day: d, reward, multiplier: mult });
+  }
 };
 
 const MISSIONS = [
@@ -2948,7 +4833,194 @@ function doClaimMission(m) {
   toast('+' + reward + ' 💎' + multiplierLabel(mult));
   playClaimSound();
   tgHaptic('success');
+  if (typeof MX !== 'undefined' && MX.ready) {
+    MX.track('Mission Claimed', { id: m.id, reward, multiplier: mult });
+  }
 }
+
+/* =========================================================
+   [JS-14a] Wheel of Fortune — daily free spin
+   ========================================================= */
+// 12 weighted segments. Probability proportional to `w`. Sum = 100.
+// Tuned to make most spins feel rewarding (gems) with rare booster wins.
+const SPIN_PRIZES = [
+  { kind: 'gems',    n: 25,   w: 22, label: '25 💎',  color: '#ffd166' },
+  { kind: 'gems',    n: 50,   w: 18, label: '50 💎',  color: '#f4a261' },
+  { kind: 'gems',    n: 100,  w: 10, label: '100 💎', color: '#e76f51' },
+  { kind: 'gems',    n: 200,  w: 4,  label: '200 💎', color: '#f72585' },
+  { kind: 'gems',    n: 500,  w: 1,  label: '500 💎', color: '#fdc500' },
+  { kind: 'hammer',  n: 1,    w: 11, label: '🔨 ×1', color: '#9b5de5' },
+  { kind: 'hammer',  n: 3,    w: 4,  label: '🔨 ×3', color: '#6c2eb5' },
+  { kind: 'shake',   n: 1,    w: 11, label: '🌀 ×1', color: '#2a9d8f' },
+  { kind: 'shake',   n: 3,    w: 4,  label: '🌀 ×3', color: '#176d62' },
+  { kind: 'undo',    n: 2,    w: 8,  label: '↩️ ×2', color: '#457b9d' },
+  { kind: 'revive',  n: 1,    w: 5,  label: '🟢 +Revive', color: '#39ff14' },
+  { kind: 'jackpot', n: 1,    w: 2,  label: '🏆 Jackpot', color: '#fff' },
+];
+
+let spinAngle = 0;          // current rotation in radians
+let spinTargetAngle = 0;    // animation target
+let spinAnimating = false;
+
+function canSpinToday() {
+  return state.lastSpinYMD !== ymd();
+}
+
+function renderSpinWheel(highlightIdx) {
+  const cvs = document.getElementById('spin-canvas');
+  if (!cvs) return;
+  const c = ensureHiDPI(cvs, 260, 260);
+  const W = 260, H = 260, cx = W / 2, cy = H / 2;
+  const r = Math.min(W, H) * 0.46;
+  c.clearRect(0, 0, W, H);
+  const n = SPIN_PRIZES.length;
+  const arc = (Math.PI * 2) / n;
+  c.save();
+  c.translate(cx, cy);
+  c.rotate(spinAngle);
+  for (let i = 0; i < n; i++) {
+    const p = SPIN_PRIZES[i];
+    const a0 = i * arc - Math.PI / 2 - arc / 2;
+    const a1 = a0 + arc;
+    c.beginPath();
+    c.moveTo(0, 0);
+    c.arc(0, 0, r, a0, a1);
+    c.closePath();
+    c.fillStyle = p.color;
+    c.fill();
+    if (highlightIdx === i) {
+      c.fillStyle = 'rgba(255,255,255,0.45)';
+      c.fill();
+    }
+    c.strokeStyle = 'rgba(0,0,0,0.18)';
+    c.lineWidth = 2;
+    c.stroke();
+    // Label radial
+    c.save();
+    c.rotate(a0 + arc / 2);
+    c.fillStyle = '#2b0a10';
+    c.font = 'bold 11px -apple-system, system-ui, sans-serif';
+    c.textAlign = 'right';
+    c.textBaseline = 'middle';
+    c.fillText(p.label, r - 8, 0);
+    c.restore();
+  }
+  // Center hub
+  c.fillStyle = '#fff';
+  c.beginPath(); c.arc(0, 0, r * 0.22, 0, Math.PI * 2); c.fill();
+  c.strokeStyle = '#b88317'; c.lineWidth = 3; c.stroke();
+  c.fillStyle = '#a51d30';
+  c.font = 'bold 22px sans-serif';
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.fillText('🪆', 0, 1);
+  // Outer rim
+  c.beginPath(); c.arc(0, 0, r + 4, 0, Math.PI * 2);
+  c.strokeStyle = '#b88317'; c.lineWidth = 6; c.stroke();
+  c.restore();
+}
+
+function pickWeightedPrize() {
+  const total = SPIN_PRIZES.reduce((s, p) => s + p.w, 0);
+  let r = Math.random() * total;
+  for (let i = 0; i < SPIN_PRIZES.length; i++) {
+    r -= SPIN_PRIZES[i].w;
+    if (r < 0) return i;
+  }
+  return 0;
+}
+
+function doSpin() {
+  if (spinAnimating) return;
+  if (!canSpinToday()) { toast('Come back tomorrow!'); return; }
+  state.lastSpinYMD = ymd();
+  state.spinCount = (state.spinCount || 0) + 1;
+  if (typeof MX !== 'undefined' && MX.ready) {
+    MX.track('Daily Spin', { spin_count_lifetime: state.spinCount });
+    MX.incrementProfile({ total_spins_ever: 1 });
+  }
+  save(); renderSpinSection();
+  const idx = pickWeightedPrize();
+  const arc = (Math.PI * 2) / SPIN_PRIZES.length;
+  // Target: rotate so segment idx lands under the top pointer.
+  // Pointer is at angle -PI/2 (top). Segment i is centered at i*arc - PI/2.
+  // We want segment center to align with the pointer angle.
+  const segmentCenter = idx * arc;
+  const fullSpins = 5 + Math.floor(Math.random() * 3);
+  spinTargetAngle = spinAngle + fullSpins * Math.PI * 2 - segmentCenter;
+  spinAnimating = true;
+  const startAngle = spinAngle;
+  const totalDelta = spinTargetAngle - startAngle;
+  const startMs = performance.now();
+  const durMs = 3600;
+  function animate() {
+    const t = Math.min(1, (performance.now() - startMs) / durMs);
+    // Ease-out cubic
+    const eased = 1 - Math.pow(1 - t, 3);
+    spinAngle = startAngle + totalDelta * eased;
+    renderSpinWheel();
+    if (t < 1) {
+      requestAnimationFrame(animate);
+    } else {
+      spinAnimating = false;
+      // Settle on exact angle to avoid float drift
+      spinAngle = spinTargetAngle % (Math.PI * 2);
+      renderSpinWheel(idx);
+      applySpinPrize(SPIN_PRIZES[idx]);
+    }
+  }
+  requestAnimationFrame(animate);
+  tone(440, 0.08, 'triangle', 0.10);
+}
+
+function applySpinPrize(p) {
+  // Jackpot rolls another big-gems-or-special prize for the dramatic
+  // "what did I win" moment. Skip in v1: just grant 500 gems + a revive.
+  let grant = {};
+  if (p.kind === 'gems')    grant.gems = p.n;
+  if (p.kind === 'hammer')  grant.hammers = p.n;
+  if (p.kind === 'shake')   grant.shakes = p.n;
+  if (p.kind === 'undo')    grant.undos = p.n;
+  if (p.kind === 'revive')  grant.revives = p.n;
+  if (p.kind === 'jackpot') grant = { gems: 500, revives: 1, hammers: 2 };
+  if (typeof MX !== 'undefined' && MX.ready) {
+    MX.track('Daily Spin Prize', { kind: p.kind, amount: p.n, label: p.label });
+  }
+  applyGrant(grant);
+  save(); hudUpdate(); renderSpinSection();
+  setTimeout(() => {
+    toast('🎉 ' + p.label + (p.kind === 'jackpot' ? ' — 500💎 + revive + 2🔨!' : ''));
+    playClaimSound();
+    tgHaptic('success');
+  }, 200);
+}
+
+function renderSpinSection() {
+  renderSpinWheel();
+  const btn = document.getElementById('spin-btn');
+  const status = document.getElementById('spin-status');
+  if (!btn) return;
+  if (canSpinToday()) {
+    btn.disabled = false;
+    btn.textContent = '🎡 ' + t('spin_go');
+    if (status) status.textContent = '· ' + t('spin_ready');
+  } else {
+    btn.disabled = true;
+    btn.textContent = '✓ ' + t('come_back');
+    if (status) status.textContent = '· ' + (t('spins_total') || 'spins') + ': ' + (state.spinCount || 0);
+  }
+}
+
+document.getElementById('spin-btn').addEventListener('click', doSpin);
+// Season Pass full-screen modal — wire up Play-screen strip + modal CTAs
+document.getElementById('season-strip').addEventListener('click', openSeasonModal);
+document.getElementById('season-close').addEventListener('click', closeSeasonModal);
+document.getElementById('season-shade').addEventListener('click', (e) => {
+  if (e.target.id === 'season-shade') closeSeasonModal();
+});
+document.getElementById('season-buy-premium').addEventListener('click', () => {
+  if (typeof MX !== 'undefined' && MX.ready) MX.track('Season Premium Buy Tapped');
+  buySku('season_pass_premium');
+});
 
 /* =========================================================
    [JS-14b] Achievements
@@ -2959,7 +5031,7 @@ const ACHIEVEMENTS = [
   { id: 'reach_t6',    icon: '🪆', t: 'Reach the Mother',    sub: 'Tier 6 doll',                   reward: 60,  check: () => (state.bestTierEver || 0) >= 5 },
   { id: 'reach_t8',    icon: '🪆', t: 'Reach the Merchant',  sub: 'Tier 8 doll',                   reward: 100, check: () => (state.bestTierEver || 0) >= 7 },
   { id: 'reach_t10',   icon: '🪆', t: 'Reach the Princess',  sub: 'Tier 10 doll',                  reward: 200, check: () => (state.bestTierEver || 0) >= 9 },
-  { id: 'reach_t11',   icon: '👑', t: 'Reach the Tsarina',   sub: 'Make a Tier 11 — the legend',   reward: 500, check: () => (state.bestTierEver || 0) >= 10 },
+  { id: 'reach_t11',   icon: '👑', t: 'Reach the Tsaritsa',   sub: 'Make a Tier 11 — the legend',   reward: 500, check: () => (state.bestTierEver || 0) >= 10 },
   { id: 'games_10',    icon: '🎮', t: '10 Games',            sub: 'Play 10 games total',           reward: 30,  check: () => (state.totalGamesEver || 0) >= 10 },
   { id: 'games_50',    icon: '🎮', t: '50 Games',            sub: 'Play 50 games total',           reward: 100, check: () => (state.totalGamesEver || 0) >= 50 },
   { id: 'merges_100',  icon: '🔀', t: '100 Total Merges',    sub: 'Across all your runs',          reward: 60,  check: () => (state.totalMergesEver || 0) >= 100 },
@@ -2972,13 +5044,67 @@ const ACHIEVEMENTS = [
 ];
 
 function checkAchievements() {
+  // v0.3.7 — auto-grant gems on unlock. Players were getting a toast
+  // saying "🏅 +60 💎" but the gem counter stayed put because the toast
+  // only marked the achievement as unlocked — they had to manually
+  // navigate to the Earn tab and tap Claim to actually get the gems.
+  // Confusing and friction-y. Now: unlock = instant grant + pulse + sfx.
+  let granted = false;
+  let delayMs = 800;
   for (const a of ACHIEVEMENTS) {
     if (state.achievements[a.id]) continue;
     if (a.check && a.check()) {
-      state.achievements[a.id] = { unlockedYMD: ymd() };
-      // Pop a small celebration after the game-over modal lands
-      setTimeout(() => toast('🏅 ' + a.t + ' · +' + a.reward + ' 💎'), 800);
+      const mult = rewardMultiplier();
+      const grant = a.reward * mult;
+      state.gems = (state.gems || 0) + grant;
+      state.achievements[a.id] = {
+        unlockedYMD: ymd(),
+        claimed: true,
+        claimedYMD: ymd(),
+      };
+      granted = true;
+      if (typeof MX !== 'undefined' && MX.ready) {
+        MX.track('Achievement Unlocked', {
+          id: a.id, title: a.t, reward: grant, multiplier: mult,
+        });
+      }
+      // Stagger toasts so multiple simultaneous unlocks (e.g., reach_t6 +
+      // merges_100 in the same big game) don't stack on top of each other.
+      const myDelay = delayMs;
+      delayMs += 1400;
+      const multSuffix = mult > 1 ? ' (' + mult + '×)' : '';
+      setTimeout(() => {
+        toast('🏅 ' + a.t + ' · +' + grant + ' 💎' + multSuffix);
+        hudUpdate();           // pulse the gem pill
+        playClaimSound();
+        tgHaptic('success');
+      }, myDelay);
     }
+  }
+  if (granted) save();
+}
+
+// One-shot migration for players who unlocked achievements before v0.3.7
+// and never tapped Claim. They have state.achievements[id] = {unlockedYMD}
+// without a `claimed` flag. Retroactively grant the gems on next boot so
+// their account state matches what the toasts told them they earned.
+function migratePastAchievements() {
+  let granted = 0;
+  for (const a of ACHIEVEMENTS) {
+    const rec = state.achievements[a.id];
+    if (rec && !rec.claimed) {
+      state.gems = (state.gems || 0) + a.reward;
+      state.achievements[a.id] = Object.assign({}, rec, { claimed: true, claimedYMD: ymd() });
+      granted += a.reward;
+    }
+  }
+  if (granted > 0) {
+    save();
+    setTimeout(() => {
+      toast('🏅 +' + granted + ' 💎 from past achievements');
+      hudUpdate();
+      playClaimSound();
+    }, 2400);
   }
 }
 
@@ -3095,6 +5221,358 @@ function multiplierLabel(m) {
 /* =========================================================
    [JS-14e] Streak milestones
    ========================================================= */
+/* =========================================================
+   [JS-14g] Season Pass — weekly 20-step ladder w/ free + premium lanes
+   =========================================================
+   Player accumulates "season points" by summing the score of every
+   completed game during the ISO week. Each step has a score threshold
+   and rewards. Premium rewards are always 4× the free reward of the
+   same step (4× the qty of the same resource). Premium lane gates
+   behind a one-shot 100⭐ purchase that lasts the current season.
+   At each new ISO-week boundary, the season auto-resets — points zero
+   out, claimed flags zero out, premium-pass flag clears (the player
+   buys it fresh each week, like any battle pass).
+*/
+// v0.3.41 — 28-step structure spec'd by Pickle:
+//   - 4 sets of 7 steps each (6 gem rewards + 1 booster reward)
+//   - Gem amounts: 1, 2, 3, 4, 5, 6 in set 1; continue from where the
+//     previous set ended, +1 per step (7-12, 13-18, 19-24)
+//   - Booster rewards in order from simplest → strongest:
+//       set 1 → undo, set 2 → shake, set 3 → hammer, set 4 → revive
+//   - Premium lane = 5× free (gems AND booster quantities)
+//   - Final threshold = 500,000 points (entire season cost)
+// Thresholds: keep the original 20-step quadratic curve × 10 for steps
+// 1-20 (1k → 250k), then extend in even-ish 40k jumps to 500k by step 28.
+const SEASON_PASS_STEPS = [
+  // Set 1 — gems 1-6, then Undo booster
+  { threshold: 1000,   free: { gems: 1 },     premium: { gems: 5 }   },
+  { threshold: 2500,   free: { gems: 2 },     premium: { gems: 10 }  },
+  { threshold: 4500,   free: { gems: 3 },     premium: { gems: 15 }  },
+  { threshold: 7000,   free: { gems: 4 },     premium: { gems: 20 }  },
+  { threshold: 10000,  free: { gems: 5 },     premium: { gems: 25 }  },
+  { threshold: 14000,  free: { gems: 6 },     premium: { gems: 30 }  },
+  { threshold: 19000,  free: { undos: 1 },    premium: { undos: 5 }  },
+  // Set 2 — gems 7-12, then Shake booster
+  { threshold: 25000,  free: { gems: 7 },     premium: { gems: 35 }  },
+  { threshold: 32000,  free: { gems: 8 },     premium: { gems: 40 }  },
+  { threshold: 40000,  free: { gems: 9 },     premium: { gems: 45 }  },
+  { threshold: 50000,  free: { gems: 10 },    premium: { gems: 50 }  },
+  { threshold: 62000,  free: { gems: 11 },    premium: { gems: 55 }  },
+  { threshold: 76000,  free: { gems: 12 },    premium: { gems: 60 }  },
+  { threshold: 92000,  free: { shakes: 1 },   premium: { shakes: 5 } },
+  // Set 3 — gems 13-18, then Hammer booster
+  { threshold: 110000, free: { gems: 13 },    premium: { gems: 65 }  },
+  { threshold: 130000, free: { gems: 14 },    premium: { gems: 70 }  },
+  { threshold: 152000, free: { gems: 15 },    premium: { gems: 75 }  },
+  { threshold: 176000, free: { gems: 16 },    premium: { gems: 80 }  },
+  { threshold: 202000, free: { gems: 17 },    premium: { gems: 85 }  },
+  { threshold: 230000, free: { gems: 18 },    premium: { gems: 90 }  },
+  { threshold: 260000, free: { hammers: 1 },  premium: { hammers: 5 }},
+  // Set 4 — gems 19-24, then Revive booster (final)
+  { threshold: 290000, free: { gems: 19 },    premium: { gems: 95 }  },
+  { threshold: 330000, free: { gems: 20 },    premium: { gems: 100 } },
+  { threshold: 370000, free: { gems: 21 },    premium: { gems: 105 } },
+  { threshold: 410000, free: { gems: 22 },    premium: { gems: 110 } },
+  { threshold: 440000, free: { gems: 23 },    premium: { gems: 115 } },
+  { threshold: 465000, free: { gems: 24 },    premium: { gems: 120 } },
+  { threshold: 500000, free: { revives: 1 },  premium: { revives: 5 }},
+];
+const SEASON_TOTAL_TARGET = SEASON_PASS_STEPS[SEASON_PASS_STEPS.length - 1].threshold;
+
+// ISO week id (matches server.js convention)
+function clientIsoWeekId(d) {
+  d = new Date(d || Date.now());
+  d.setUTCHours(0, 0, 0, 0);
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+  return d.getUTCFullYear() + '-W' + String(weekNo).padStart(2, '0');
+}
+function seasonEndsAtMs() {
+  // End of current ISO week = next Monday 00:00 UTC
+  const d = new Date();
+  d.setUTCHours(0, 0, 0, 0);
+  const dow = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + (8 - dow));
+  return d.getTime();
+}
+function ensureSeasonFresh() {
+  const wk = clientIsoWeekId();
+  if (!state.season || state.season.weekId !== wk) {
+    if (state.season && typeof MX !== 'undefined' && MX.ready) {
+      MX.track('Season Reset', {
+        prev_week: state.season.weekId, new_week: wk,
+        prev_points: state.season.points || 0,
+        prev_was_premium: !!state.season.premium,
+        prev_claimed_free: (state.season.claimedFree || []).length,
+        prev_claimed_premium: (state.season.claimedPremium || []).length,
+      });
+    }
+    state.season = {
+      weekId: wk,
+      points: 0,
+      premium: false,
+      claimedFree: [],
+      claimedPremium: [],
+      started_at: Date.now(),
+    };
+  }
+}
+function addSeasonPoints(amount) {
+  if (!amount || amount <= 0) return;
+  ensureSeasonFresh();
+  state.season.points = (state.season.points || 0) + Math.round(amount);
+}
+
+function refreshSeasonStrip() {
+  ensureSeasonFresh();
+  const s = state.season;
+  const pts = s.points || 0;
+  const isPremium = !!s.premium;
+  const nextStep = SEASON_PASS_STEPS.find(st => pts < st.threshold);
+  const nextThreshold = nextStep ? nextStep.threshold : SEASON_TOTAL_TARGET;
+  const stripEl = document.getElementById('season-strip');
+  const fill = document.getElementById('season-strip-fill');
+  const ptsEl = document.getElementById('season-strip-pts');
+  const nextRewardEl = document.getElementById('season-strip-next-reward');
+  // Premium variant on the strip — gold star + glow + premium-gradient bar
+  if (stripEl) stripEl.classList.toggle('premium', isPremium);
+  if (fill) {
+    // Bar shows progress between previous step threshold and next step
+    // threshold, so each step earns a visible chunk of bar growth.
+    const prevIdx = SEASON_PASS_STEPS.findIndex(st => st === nextStep) - 1;
+    const prevThreshold = prevIdx >= 0 ? SEASON_PASS_STEPS[prevIdx].threshold : 0;
+    const span = nextThreshold - prevThreshold;
+    const local = pts - prevThreshold;
+    const pct = nextStep ? Math.max(0, Math.min(100, (local / span) * 100)) : 100;
+    fill.style.width = pct.toFixed(1) + '%';
+  }
+  if (ptsEl) {
+    ptsEl.textContent = pts.toLocaleString() + ' / ' + nextThreshold.toLocaleString();
+  }
+  if (nextRewardEl) {
+    if (nextStep) {
+      // Premium owners see what they'll get in the PRO lane; free players
+      // see the FREE lane reward at the same step.
+      const reward = isPremium ? nextStep.premium : nextStep.free;
+      nextRewardEl.textContent = formatSeasonReward(reward);
+      nextRewardEl.style.display = '';
+    } else {
+      nextRewardEl.textContent = '👑';   // maxed out
+      nextRewardEl.style.display = '';
+    }
+  }
+  // v0.3.38 — also pulse the gem pill if the season strip has unclaimed
+  // rewards waiting (visual nudge). Skipped here to keep refresh cheap;
+  // the snapshot card in game-over already calls this out.
+}
+
+function renderSeasonPass() {
+  // v0.3.35 — moved from Earn-tab inline section to its own full-screen
+  // modal. Track is now 20 rows × 3 columns (step info | free lane |
+  // premium lane), with the lanes side-by-side and the steps stacked
+  // top-to-bottom, scrollable vertically inside the modal body.
+  ensureSeasonFresh();
+  refreshSeasonStrip();
+  const shade = document.getElementById('season-shade');
+  if (!shade) return;
+  const s = state.season;
+  const pts = s.points || 0;
+  const isPremium = !!s.premium;
+  // Countdown to end of week
+  const msLeft = Math.max(0, seasonEndsAtMs() - Date.now());
+  const days = Math.floor(msLeft / 86400000);
+  const hours = Math.floor((msLeft % 86400000) / 3600000);
+  const cdEl = document.getElementById('season-countdown');
+  if (cdEl) cdEl.textContent = '· ' + (days ? days + 'd ' : '') + hours + 'h';
+  // Big progress bar inside the modal
+  const progressEl = document.getElementById('season-progress-bar');
+  if (progressEl) {
+    const pct = Math.min(100, (pts / SEASON_TOTAL_TARGET) * 100);
+    progressEl.style.width = pct.toFixed(1) + '%';
+  }
+  const nextStep = SEASON_PASS_STEPS.find(st => pts < st.threshold);
+  const progressTextEl = document.getElementById('season-progress-text');
+  if (progressTextEl) {
+    progressTextEl.innerHTML = '<span>' + pts.toLocaleString() + ' pts</span>' +
+      '<span>' + (nextStep ? ('Next: ' + nextStep.threshold.toLocaleString()) : 'MAX!') + '</span>';
+  }
+  const cta = document.getElementById('season-premium-cta');
+  if (cta) cta.style.display = isPremium ? 'none' : '';
+  // Build the 20 rows (step info | free | premium)
+  const rows = document.getElementById('season-rows');
+  if (!rows) return;
+  rows.innerHTML = '';
+  SEASON_PASS_STEPS.forEach((step, idx) => {
+    const row = document.createElement('div');
+    row.className = 'season-row';
+    if (pts >= step.threshold) row.classList.add('reached');
+    const freeClaimed = s.claimedFree.includes(idx);
+    const freeReachable = pts >= step.threshold;
+    const premClaimed = s.claimedPremium.includes(idx);
+    const premReachable = pts >= step.threshold && isPremium;
+    row.innerHTML = `
+      <div class="step-info">
+        <div class="step-num">STEP ${idx + 1}</div>
+        <div class="step-threshold">${step.threshold.toLocaleString()}</div>
+      </div>
+      <div class="lane lane-free ${freeClaimed ? 'claimed' : (freeReachable ? 'claimable' : 'locked')}" data-lane="free" data-idx="${idx}">
+        <div class="lane-reward">${formatSeasonReward(step.free)}</div>
+        <div class="lane-action">${freeClaimed ? '✓' : freeReachable ? '<span class="lane-claim-tag">CLAIM</span>' : '🔒'}</div>
+      </div>
+      <div class="lane lane-premium ${premClaimed ? 'claimed' : premReachable ? 'claimable' : 'locked'}${!isPremium ? ' no-premium' : ''}" data-lane="premium" data-idx="${idx}">
+        <div class="lane-reward">${formatSeasonReward(step.premium)}</div>
+        <div class="lane-action">${
+          !isPremium ? '🔒'
+          : premClaimed ? '✓'
+          : premReachable ? '<span class="lane-claim-tag">CLAIM</span>'
+          : '🔒'
+        }</div>
+      </div>
+    `;
+    rows.appendChild(row);
+  });
+  rows.querySelectorAll('.lane').forEach(el => {
+    el.onclick = () => {
+      const lane = el.getAttribute('data-lane');
+      const idx = parseInt(el.getAttribute('data-idx'), 10);
+      if (lane === 'free') {
+        if (s.claimedFree.includes(idx) || pts < SEASON_PASS_STEPS[idx].threshold) return;
+        claimSeasonStep(idx, 'free');
+      } else {
+        if (!isPremium) { buySku('season_pass_premium'); return; }
+        if (s.claimedPremium.includes(idx) || pts < SEASON_PASS_STEPS[idx].threshold) return;
+        claimSeasonStep(idx, 'premium');
+      }
+    };
+  });
+}
+
+// Count steps that are unlocked-but-not-claimed across both lanes
+// (premium lane only counts if state.season.premium is true).
+function countSeasonClaimable(pts) {
+  ensureSeasonFresh();
+  const s = state.season;
+  let n = 0;
+  SEASON_PASS_STEPS.forEach((st, idx) => {
+    if (pts >= st.threshold) {
+      if (!s.claimedFree.includes(idx)) n++;
+      if (s.premium && !s.claimedPremium.includes(idx)) n++;
+    }
+  });
+  return n;
+}
+
+// Smooth ease-out animation of the snapshot bar from `before` % to
+// `after` %, with ascending tick tones. If the player crossed any
+// step thresholds during this game, fire a triumphant flourish at
+// the end of the bar growth.
+function animateSeasonSnapshot(pointsBefore, pointsAfter, newlyCrossed) {
+  const fill = document.getElementById('snapshot-bar-fill');
+  const textEl = document.getElementById('snapshot-text');
+  if (!fill) return;
+  const startPct = Math.min(100, (pointsBefore / SEASON_TOTAL_TARGET) * 100);
+  const endPct   = Math.min(100, (pointsAfter  / SEASON_TOTAL_TARGET) * 100);
+  if (endPct <= startPct + 0.05) {
+    // No measurable growth — just paint final state and exit (no sound)
+    fill.style.width = endPct.toFixed(1) + '%';
+    return;
+  }
+  const durMs = 1300;
+  const startMs = performance.now();
+  let lastToneMs = 0;
+  function tick() {
+    const t = Math.min(1, (performance.now() - startMs) / durMs);
+    // Ease-out cubic so the bar surges then decelerates into the new position
+    const eased = 1 - Math.pow(1 - t, 3);
+    const pct = startPct + (endPct - startPct) * eased;
+    fill.style.width = pct.toFixed(1) + '%';
+    // Live update the points readout so the number ticks up with the bar
+    if (textEl) {
+      const liveP = Math.round(pointsBefore + (pointsAfter - pointsBefore) * eased);
+      const nx = SEASON_PASS_STEPS.find(st => liveP < st.threshold);
+      textEl.textContent = liveP.toLocaleString() + ' / ' +
+        (nx ? nx.threshold.toLocaleString() : SEASON_TOTAL_TARGET.toLocaleString()) +
+        (nx ? ' to next step' : ' · MAX!');
+    }
+    // Ticking tones every ~90ms during the fill (ascending pitch)
+    const nowMs = performance.now();
+    if (nowMs - lastToneMs > 90) {
+      tone(330 + t * 250, 0.05, 'triangle', 0.06);
+      lastToneMs = nowMs;
+    }
+    if (t < 1) requestAnimationFrame(tick);
+    else {
+      // Finish flourish — bigger if a milestone was crossed
+      if (newlyCrossed > 0) {
+        tone(660, 0.12, 'triangle', 0.14);
+        setTimeout(() => tone(880, 0.16, 'triangle', 0.14), 100);
+        setTimeout(() => tone(1320, 0.20, 'sine', 0.12), 220);
+        tgHaptic('success');
+      } else {
+        tone(660, 0.10, 'triangle', 0.10);
+      }
+    }
+  }
+  requestAnimationFrame(tick);
+}
+
+function openSeasonModal() {
+  renderSeasonPass();
+  document.getElementById('season-shade').classList.add('show');
+  if (typeof MX !== 'undefined' && MX.ready) MX.track('Season Modal Opened');
+  // Auto-scroll to the player's current step so the next-up reward is
+  // visible without manual scrolling. Use a microtask so the modal has
+  // laid out before we measure.
+  setTimeout(() => {
+    const pts = (state.season && state.season.points) || 0;
+    const nextIdx = SEASON_PASS_STEPS.findIndex(st => pts < st.threshold);
+    const rows = document.querySelectorAll('#season-rows .season-row');
+    const target = rows[Math.max(0, nextIdx - 1)] || rows[rows.length - 1];
+    if (target) target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, 50);
+  tgHaptic('select');
+}
+function closeSeasonModal() {
+  document.getElementById('season-shade').classList.remove('show');
+}
+
+function formatSeasonReward(grant) {
+  if (!grant) return '—';
+  if (grant.gems)     return '💎 ' + grant.gems;
+  if (grant.hammers)  return '🔨 ×' + grant.hammers;
+  if (grant.shakes)   return '🌀 ×' + grant.shakes;
+  if (grant.undos)    return '↶ ×' + grant.undos;
+  if (grant.revives)  return '🟢 ×' + grant.revives;
+  if (grant.rainbows) return '🌈 ×' + grant.rainbows;
+  return '🎁';
+}
+
+function claimSeasonStep(idx, lane) {
+  ensureSeasonFresh();
+  const step = SEASON_PASS_STEPS[idx];
+  if (!step) return;
+  if ((state.season.points || 0) < step.threshold) return;
+  const list = lane === 'premium' ? state.season.claimedPremium : state.season.claimedFree;
+  if (list.includes(idx)) return;
+  if (lane === 'premium' && !state.season.premium) return;
+  const grant = lane === 'premium' ? step.premium : step.free;
+  applyGrant(grant);
+  list.push(idx);
+  save(); hudUpdate(); renderSeasonPass();
+  const label = formatSeasonReward(grant);
+  toast('🎟 Step ' + (idx + 1) + ' · ' + label);
+  playClaimSound();
+  tgHaptic('success');
+  if (typeof MX !== 'undefined' && MX.ready) {
+    MX.track('Season Step Claimed', {
+      step: idx + 1, threshold: step.threshold, lane,
+      reward: label, season_week: state.season.weekId,
+      points_at_claim: state.season.points,
+    });
+  }
+}
+
 const STREAK_MILESTONES = [
   { days: 3,   reward: 30 },
   { days: 7,   reward: 100 },
@@ -3130,6 +5608,9 @@ function claimMilestone(m) {
   toast('+' + reward + ' 💎' + multiplierLabel(mult));
   playClaimSound();
   tgHaptic('success');
+  if (typeof MX !== 'undefined' && MX.ready) {
+    MX.track('Streak Milestone Claimed', { days: m.days, reward, multiplier: mult });
+  }
 }
 
 /* =========================================================
@@ -3154,10 +5635,12 @@ function openStats() {
       ${rows.map(([em, lbl, val]) => `<div class="stat-row"><span class="label">${em}  ${escapeHtml(lbl)}</span><span class="value">${escapeHtml(String(val))}</span></div>`).join('')}
     </div>
     <div class="modal-btns" style="margin-top:14px">
+      <button class="btn" id="m-stats-share">📤 ${t('share_my_score') || 'Share my best score'}</button>
       <button class="btn ghost" id="m-stats-close">Close</button>
     </div>
   `;
   document.getElementById('modal-shade').classList.add('show');
+  document.getElementById('m-stats-share').onclick = () => { hideModal(); shareScore(); };
   document.getElementById('m-stats-close').onclick = hideModal;
 }
 
@@ -3332,30 +5815,64 @@ async function generateShareCard(finalScore, bestTier) {
   cc.font = 'bold 22px -apple-system, system-ui, sans-serif';
   cc.fillStyle = 'rgba(255,255,255,0.75)';
   cc.fillText('Can you beat me?', 400, 762);
-  return c.toDataURL('image/png');
+  // JPEG (not PNG) — Telegram's InlineQueryResultPhoto API requires JPEG.
+  // 0.92 quality is high-fidelity (~50-80KB for 800×800) and well under
+  // Telegram's 5MB cap. Was the silent-fail bug that made shares show no
+  // image: savePreparedInlineMessage was rejecting our PNG upload.
+  return c.toDataURL('image/jpeg', 0.92);
 }
 
 async function shareScore() {
   const finalScore = score || state.best || 0;
-  const text = t('share_text').replace('{score}', finalScore);
-  let shareUrl = window.location.href;
-  // Try to upload a share-card PNG. If it succeeds, share that URL —
-  // Telegram's link preview fetches the image automatically.
+  if (typeof MX !== 'undefined' && MX.ready) MX.track('Share Tapped', { score: finalScore });
   const initData = getInitData();
-  if (initData) {
+  // v0.3.22 — preferred path: Telegram's prepared-inline-message API.
+  // Result is a PHOTO + caption + inline "🎮 PLAY MATRYOSHKA" button
+  // (links to t.me/MatryoshkaGameBot/app). The recipient sees ONLY the
+  // image + button — no visible URL text in the message body, which
+  // was the player feedback ("can we have just the image of the
+  // user score? or does it have to include the link to the image
+  // source?"). Falls back to t.me/share/url if shareMessage isn't
+  // available (Bot API < 8.0 clients).
+  if (initData && tg && typeof tg.shareMessage === 'function') {
     try {
       const dataUrl = await generateShareCard(finalScore, state.bestTierEver || 0);
-      const r = await fetch('/api/share/upload', {
+      const upRes = await fetch('/api/share/upload', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initData, dataUrl }),
+        body: JSON.stringify({ initData, dataUrl, score: finalScore }),
       });
-      const d = await r.json();
-      if (d && d.url) shareUrl = d.url;
-    } catch (e) {}
+      const up = await upRes.json();
+      if (up && up.url) {
+        const prepRes = await fetch('/api/share/prepare-message', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ initData, photoUrl: up.url, score: finalScore }),
+        });
+        const prep = await prepRes.json();
+        if (prep && prep.prepared_message_id) {
+          tg.shareMessage(prep.prepared_message_id, (success) => {
+            if (typeof MX !== 'undefined' && MX.ready) {
+              MX.track('Share Sent', { method: 'prepared', success: !!success, score: finalScore });
+            }
+          });
+          return;
+        }
+        if (typeof MX !== 'undefined' && MX.ready) {
+          MX.track('Share Prepare Failed', { error: prep && prep.error });
+        }
+      }
+    } catch (e) {
+      if (typeof MX !== 'undefined' && MX.ready) MX.track('Share Prepare Error', { msg: String(e) });
+    }
   }
-  const tgShare = 'https://t.me/share/url?url=' + encodeURIComponent(shareUrl) + '&text=' + encodeURIComponent(text);
+  // Fallback path — t.me/share/url with the play link as the URL.
+  // The URL will be visible in the message body, but at least it's the
+  // proper play deep link (not the share-page Render URL).
+  const text = t('share_text').replace('{score}', finalScore);
+  const playUrl = 'https://t.me/MatryoshkaGameBot/app';
+  const tgShare = 'https://t.me/share/url?url=' + encodeURIComponent(playUrl) + '&text=' + encodeURIComponent(text);
   if (tg && tg.openTelegramLink) tg.openTelegramLink(tgShare);
   else window.open(tgShare, '_blank');
+  if (typeof MX !== 'undefined' && MX.ready) MX.track('Share Sent', { method: 'fallback', score: finalScore });
 }
 
 const ALL_SKINS = [
@@ -3365,6 +5882,68 @@ const ALL_SKINS = [
   { id: 'neon',      name: 'Neon',      icon: '⚡' },
   { id: 'wood',      name: 'Wood',      icon: '🪵' },
 ];
+
+// Language options — flag emoji + native-language name. Order roughly by
+// expected player share so the most-likely choices are at the top of the
+// grid. EN + RU first because they have full string coverage; the rest
+// have ~25 keys plus EN fallback.
+const LANG_OPTIONS = [
+  { code: 'en', flag: '🇬🇧', name: 'English'    },
+  { code: 'ru', flag: '🇷🇺', name: 'Русский'    },
+  { code: 'uk', flag: '🇺🇦', name: 'Українська' },
+  { code: 'es', flag: '🇪🇸', name: 'Español'    },
+  { code: 'pt', flag: '🇵🇹', name: 'Português'  },
+  { code: 'fr', flag: '🇫🇷', name: 'Français'   },
+  { code: 'de', flag: '🇩🇪', name: 'Deutsch'    },
+  { code: 'it', flag: '🇮🇹', name: 'Italiano'   },
+  { code: 'nl', flag: '🇳🇱', name: 'Nederlands' },
+  { code: 'sv', flag: '🇸🇪', name: 'Svenska'    },
+  { code: 'pl', flag: '🇵🇱', name: 'Polski'     },
+  { code: 'tr', flag: '🇹🇷', name: 'Türkçe'     },
+  { code: 'ar', flag: '🇸🇦', name: 'العربية'    },
+  { code: 'he', flag: '🇮🇱', name: 'עברית'      },
+  { code: 'hi', flag: '🇮🇳', name: 'हिन्दी'      },
+  { code: 'id', flag: '🇮🇩', name: 'Indonesia'  },
+  { code: 'vi', flag: '🇻🇳', name: 'Tiếng Việt' },
+  { code: 'zh', flag: '🇨🇳', name: '中文'       },
+  { code: 'ko', flag: '🇰🇷', name: '한국어'     },
+  { code: 'ja', flag: '🇯🇵', name: '日本語'     },
+];
+
+function renderLangPicker(container) {
+  container.innerHTML = '';
+  for (const L of LANG_OPTIONS) {
+    const tile = document.createElement('div');
+    tile.className = 'lang-tile' + (state.settings.lang === L.code ? ' active' : '');
+    tile.innerHTML = `<div class="flag">${L.flag}</div><div class="name">${L.name}</div>`;
+    tile.onclick = () => {
+      const prev = state.settings.lang;
+      if (prev === L.code) return;
+      state.settings.lang = L.code;
+      save();
+      applyI18n();             // updates every [data-i18n] text
+      renderLangPicker(container);
+      // Re-render whatever tab is open so localized labels refresh immediately
+      if (state.activeTab === 'shop') renderShop();
+      if (state.activeTab === 'earn') {
+        renderBattlePassBanner();
+        renderSpinSection();
+        renderChest();
+        renderMilestones();
+        renderMissions();
+        renderAchievements();
+      }
+      hudUpdate();
+      if (typeof MX !== 'undefined' && MX.ready) {
+        MX.track('Language Changed', { from: prev, to: L.code });
+        MX.setProfile({ language: L.code });
+        MX.setSuper({ lang: L.code });
+      }
+      tgHaptic('select');
+    };
+    container.appendChild(tile);
+  }
+}
 function renderSkinPicker(container) {
   container.innerHTML = '';
   for (const s of ALL_SKINS) {
@@ -3375,20 +5954,38 @@ function renderSkinPicker(container) {
       (!owned ? ' locked' : '');
     tile.innerHTML = `<div class="em">${s.icon}</div><div>${s.name}</div>` + (!owned ? '<div style="font-size:9px">🔒 Shop</div>' : '');
     tile.onclick = () => {
-      if (!owned) { switchTab('shop'); hideModal(); return; }
+      if (!owned) {
+        switchTab('shop'); hideModal();
+        if (typeof MX !== 'undefined') MX.track('Skin Locked Tap', { skin: s.id });
+        return;
+      }
+      const prev = state.activeSkin;
       state.activeSkin = s.id;
       save();
       renderSkinPicker(container);
       buildTierDots();
+      if (typeof MX !== 'undefined') {
+        MX.track('Skin Changed', { from: prev, to: s.id });
+        MX.setProfile({ active_skin: s.id });
+        MX.setSuper({ active_skin: s.id });
+      }
     };
     container.appendChild(tile);
   }
 }
 
+document.getElementById('btn-share').addEventListener('click', () => {
+  if (typeof MX !== 'undefined' && MX.ready) MX.track('Share Button Topbar Tapped');
+  shareScore();
+});
+
 document.getElementById('btn-settings').onclick = () => {
+  if (typeof MX !== 'undefined' && MX.ready) MX.track('Settings Opened');
   const body = document.getElementById('modal-body');
   body.innerHTML = `
     <h3>${t('settings')}</h3>
+    <div style="font-size:12px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:1px;margin-top:4px">${t('language') || 'Language'}</div>
+    <div class="lang-grid" id="lang-picker"></div>
     <div style="font-size:12px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:1px;margin-top:4px">${t('skin')}</div>
     <div class="skin-picker" id="skin-picker"></div>
     <div class="modal-btns">
@@ -3401,6 +5998,7 @@ document.getElementById('btn-settings').onclick = () => {
     </div>
   `;
   document.getElementById('modal-shade').classList.add('show');
+  renderLangPicker(document.getElementById('lang-picker'));
   renderSkinPicker(document.getElementById('skin-picker'));
   document.getElementById('m-sound').onclick = () => { state.settings.sound = !state.settings.sound; save(); document.getElementById('btn-settings').click(); hideModal(); };
   document.getElementById('m-haptics').onclick = () => { state.settings.haptics = !state.settings.haptics; save(); document.getElementById('btn-settings').click(); hideModal(); };
@@ -3411,10 +6009,20 @@ document.getElementById('btn-settings').onclick = () => {
 };
 
 function hideModal() {
-  document.getElementById('modal-shade').classList.remove('show');
+  const shade = document.getElementById('modal-shade');
+  shade.classList.remove('show');
+  // Clear the lock flag every time the modal closes so the next modal
+  // starts in the default (backdrop-closable) state. Each modal opener
+  // re-adds .locked if it needs the more aggressive lock.
+  shade.classList.remove('locked');
 }
 document.getElementById('modal-shade').addEventListener('click', (e) => {
-  if (e.target.id === 'modal-shade') hideModal();
+  // Backdrop tap only closes if the shade is NOT in locked mode. The
+  // game-over modal sets .locked to force the player into an explicit
+  // action (revive / play again / share) — no accidental dismissal.
+  if (e.target.id === 'modal-shade' && !e.currentTarget.classList.contains('locked')) {
+    hideModal();
+  }
 });
 
 let toastTimer;
@@ -3432,17 +6040,37 @@ function toast(msg) {
 function fitCanvas() {
   const wrap = document.getElementById('canvas-wrap');
   const rect = wrap.getBoundingClientRect();
-  const dpr = Math.min(2.5, window.devicePixelRatio || 1);
+  // Bail if the wrap hasn't laid out yet — calling getBoundingClientRect()
+  // before the first paint can return 0×0, which would clamp the canvas to
+  // an invisible size and silently look broken.
+  if (rect.width < 10 || rect.height < 10) return;
+  // DPR cap raised to 3.5 in v0.3.3 to match flagship Android phones.
+  const dpr = Math.min(3.5, window.devicePixelRatio || 1);
+  // Reserve a few px of breathing room at the bottom so the jar floor +
+  // a sliver of background is always visible above the tab bar. Telegram's
+  // WebView occasionally under-reports the safe-area bottom inset and the
+  // canvas would otherwise tuck its floor behind the tabs.
+  const VERTICAL_RESERVE = 12;
   const targetW = Math.min(rect.width, 420);
-  const targetH = Math.min(rect.height, 640);
+  const targetH = Math.min(rect.height - VERTICAL_RESERVE, 640);
   // Aspect ratio 360:540 (2:3). Fit width first, scale up if it leaves room.
   let cssW = targetW;
   let cssH = (cssW * 540) / 360;
   if (cssH > targetH) { cssH = targetH; cssW = (cssH * 360) / 540; }
+  // Floor CSS dimensions to integers — fractional CSS px causes the
+  // browser to subpixel-snap the canvas display, which can introduce
+  // half-pixel blur even when the internal buffer is at native DPR.
+  cssW = Math.floor(cssW);
+  cssH = Math.floor(cssH);
+  // Apply HiDPI scaling to the game canvas. Internal buffer is sized to
+  // physical pixels (cssW × dpr, cssH × dpr) for crisp rendering on 3×
+  // displays. The LOGICAL coordinate system stays at 360×540 — applied
+  // via setTransform every frame in render().
   canvas.style.width = cssW + 'px';
   canvas.style.height = cssH + 'px';
-  canvas.width = 360;
-  canvas.height = 540;
+  canvas.width = Math.round(cssW * dpr);
+  canvas.height = Math.round(cssH * dpr);
+  ctx.setTransform(canvas.width / 360, 0, 0, canvas.height / 540, 0, 0);
   // Position next-pill at top-right of jar
   const nextPill = document.getElementById('next-pill');
   const dock = document.getElementById('tiers-dock');
@@ -3460,6 +6088,20 @@ function fitCanvas() {
     // Bubble: anchor above mascot
     mascotBubble.style.left = '46px';
     mascotBubble.style.bottom = '78px';
+  }
+  // Booster rail — pinned to the wrap's right edge with a 2px buffer.
+  // Vertically centered on the canvas.
+  const rail = document.getElementById('booster-rail');
+  if (rail) {
+    rail.style.right = '2px';
+    rail.style.top = (canvasRect.top - rect.top + (canvasRect.height - rail.offsetHeight) / 2) + 'px';
+  }
+  // Cancel hint: just above the canvas top
+  const hint = document.getElementById('booster-hint');
+  if (hint) {
+    hint.style.top = (canvasRect.top - rect.top + 8) + 'px';
+    hint.style.left = '50%';
+    hint.style.transform = 'translateX(-50%)';
   }
 }
 window.addEventListener('resize', () => { fitCanvas(); applySafeArea(); });
@@ -3659,7 +6301,7 @@ function drawFtueDeathLine(c, ms) {
 
 function drawFtueGoal(c, ms) {
   c.clearRect(0, 0, FTUE_DEMO_W, FTUE_DEMO_H);
-  // Big crowned Tsarina centerpiece with smaller tiers orbiting
+  // Big crowned Tsaritsa centerpiece with smaller tiers orbiting
   const cx = FTUE_DEMO_W / 2, cy = FTUE_DEMO_H / 2 + 12;
   // Sparkles
   const N = 14;
@@ -3672,7 +6314,7 @@ function drawFtueGoal(c, ms) {
     c.fillStyle = i % 2 === 0 ? '#fdc500' : '#fff5d2';
     c.beginPath(); c.arc(px, py, Math.max(0.6, sz), 0, Math.PI * 2); c.fill();
   }
-  // The Tsarina
+  // The Tsaritsa
   const r = 56;
   const bob = Math.sin(ms / 300) * 3;
   drawMatryoshka(c, cx, cy + bob, r, 10, Math.sin(ms / 600) * 0.06, 1);
@@ -3704,7 +6346,7 @@ function ftueRenderChrome() {
 }
 
 function ftueLoop() {
-  const c = document.getElementById('ftue-canvas').getContext('2d');
+  const c = ensureHiDPI(document.getElementById('ftue-canvas'), FTUE_DEMO_W, FTUE_DEMO_H);
   const elapsed = performance.now() - ftueStepStartMs;
   const step = FTUE_STEPS[ftueIdx];
   if (step && step.draw) step.draw(c, elapsed);
@@ -3716,6 +6358,9 @@ function ftueGoTo(i) {
   ftueStepStartMs = performance.now();
   ftueRenderChrome();
   tgHaptic('select');
+  if (typeof MX !== 'undefined' && MX.ready) {
+    MX.track('FTUE Step Viewed', { step: ftueIdx, key: FTUE_STEPS[ftueIdx].key });
+  }
 }
 
 function openFtue() {
@@ -3724,21 +6369,32 @@ function openFtue() {
   ftueStepStartMs = performance.now();
   ftueRenderChrome();
   if (!ftueRafId) ftueLoop();
+  if (typeof MX !== 'undefined' && MX.ready) {
+    MX.track('FTUE Started');
+    MX.track('FTUE Step Viewed', { step: 0, key: FTUE_STEPS[0].key });
+  }
 }
 
-function closeFtue() {
+function closeFtue(reason) {
   document.getElementById('ftue-shade').classList.remove('show');
   if (ftueRafId) { cancelAnimationFrame(ftueRafId); ftueRafId = 0; }
+  const wasDone = !!state.ftueDone;
   state.ftueDone = true;
   state.welcomed = true;
   state.firstSeenAt = state.firstSeenAt || Date.now();
   save();
+  if (typeof MX !== 'undefined' && MX.ready && !wasDone) {
+    MX.track(reason === 'skip' ? 'FTUE Skipped' : 'FTUE Completed', {
+      last_step: ftueIdx,
+    });
+    MX.setProfile({ ftue_done: true, ftue_completed_at: new Date().toISOString() });
+  }
 }
 
-document.getElementById('ftue-skip').onclick = closeFtue;
+document.getElementById('ftue-skip').onclick = () => closeFtue('skip');
 document.getElementById('ftue-back').onclick = () => ftueGoTo(ftueIdx - 1);
 document.getElementById('ftue-next').onclick = () => {
-  if (ftueIdx >= FTUE_STEPS.length - 1) { closeFtue(); tgHaptic('success'); }
+  if (ftueIdx >= FTUE_STEPS.length - 1) { closeFtue('finished'); tgHaptic('success'); }
   else ftueGoTo(ftueIdx + 1);
 };
 
@@ -3763,6 +6419,74 @@ function openFtueIfFirst() {
   buildTierDots();
   fitCanvas();
   rolloverDailyIfNeeded();
+  // Mixpanel — fetch token from /api/flags, identify the player, fire
+  // session-start with rich super properties so retention cohorts and
+  // funnel analyses work out of the box.
+  try {
+    const flagsRes = await fetch('/api/flags');
+    const flags = await flagsRes.json();
+    const tgUser = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) || null;
+    const distinctId = tgUser ? String(tgUser.id) : null;
+    MX.init(flags.mixpanel_token, distinctId, tgUser ? {
+      $first_name: tgUser.first_name || '',
+      $last_name: tgUser.last_name || '',
+      $name: tgUser.first_name || tgUser.username || ('User ' + tgUser.id),
+      username: tgUser.username || '',
+      telegram_id: tgUser.id,
+      language: tgUser.language_code || 'en',
+      is_premium: !!tgUser.is_premium,
+      platform: (tg && tg.platform) || 'web',
+      app_version: MX_VERSION,
+      first_seen_at: state.firstSeenAt ? new Date(state.firstSeenAt).toISOString() : new Date().toISOString(),
+    } : null);
+    MX.setSuper({
+      mode: state.mode || 'endless',
+      active_skin: state.activeSkin || 'classic',
+      lang: state.settings && state.settings.lang || 'en',
+    });
+    // Determine returning vs new for retention day-N tagging
+    const today = ymd();
+    const isReturning = state.lastPlayedYMD && state.lastPlayedYMD !== today;
+    MX.track('Session Start', {
+      streak: state.streak || 0,
+      gems: state.gems || 0,
+      best_score: state.best || 0,
+      best_tier: state.bestTierEver || 0,
+      total_games_ever: state.totalGamesEver || 0,
+      is_returning: !!isReturning,
+      day_of_week: new Date().getUTCDay(),
+      hour_utc: new Date().getUTCHours(),
+      is_fullscreen: !!(tg && tg.isFullscreen),
+    });
+    // Sync the player's cumulative state to Mixpanel user profile so
+    // we can build cohorts based on gems / streak / best score.
+    MX.setProfile({
+      gems: state.gems || 0,
+      best_score: state.best || 0,
+      best_tier: state.bestTierEver || 0,
+      best_combo: state.bestComboEver || 0,
+      streak: state.streak || 0,
+      total_games_ever: state.totalGamesEver || 0,
+      total_merges_ever: state.totalMergesEver || 0,
+      total_iaps_ever: state.totalIapsEver || 0,
+      skins_owned: (state.skins || []).length,
+      ftue_done: !!state.ftueDone,
+      mode_preferred: state.mode || 'endless',
+      last_seen_at: new Date().toISOString(),
+    });
+    // Heartbeat every 60s so Mixpanel sees real session duration
+    setInterval(() => MX.track('Session Heartbeat'), 60 * 1000);
+    // Session End on page hide / unload — sendBeacon survives the unload.
+    const fireSessionEnd = () => {
+      const durSec = Math.round((Date.now() - MX.sessionStartMs) / 1000);
+      MX.track('Session End', { duration_sec: durSec });
+    };
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') fireSessionEnd();
+    });
+    window.addEventListener('pagehide', fireSessionEnd);
+    window.addEventListener('beforeunload', fireSessionEnd);
+  } catch (e) { /* analytics is best-effort */ }
   // Load the daily seed FIRST so the deterministic queue is ready if the
   // saved mode is 'daily'. Falls back to a default seed if offline.
   await loadDailySeed();
@@ -3792,6 +6516,20 @@ function openFtueIfFirst() {
     } catch (e) {}
   }
   requestAnimationFrame(gameTick);
+  // Paint the Season Pass progress strip on boot so it shows real points
+  // (and current next-step threshold) instead of the "0 / 100" default.
+  refreshSeasonStrip();
+  // Retroactively claim any pre-v0.3.7 achievements that were unlocked
+  // but never tapped — players assumed the "+N 💎" toast meant the gems
+  // had already landed (now they do, but this fixes accounts created
+  // before that change).
+  migratePastAchievements();
+  // Schedule a couple of follow-up fitCanvas calls — Telegram's safe-area
+  // insets sometimes arrive a few hundred ms after initial paint, and we
+  // want the jar to re-snap to the corrected available height.
+  setTimeout(fitCanvas, 120);
+  setTimeout(fitCanvas, 500);
+  setTimeout(fitCanvas, 1200);
   // Splash auto-dismiss after the loading bar finishes (1.4s + 200ms breathing room)
   setTimeout(() => {
     const sp = document.getElementById('splash');
@@ -3800,6 +6538,8 @@ function openFtueIfFirst() {
       setTimeout(() => sp.remove(), 500);
     }
     openFtueIfFirst();
+    // Final fit after splash is gone, in case the viewport reflowed.
+    setTimeout(fitCanvas, 100);
   }, 1500);
   checkAchievements();
   // Show mascot intro line briefly when game is ready
@@ -3811,6 +6551,9 @@ function openFtueIfFirst() {
   // Power Hour — fetch on boot + refresh every 5 min
   fetchPowerHour();
   setInterval(fetchPowerHour, 5 * 60 * 1000);
+  // Admin detection — show 1⭐ test-pricing toggle in Shop if the
+  // authenticated Telegram user is on the admin allow-list (server-validated).
+  fetchAdminStatus();
 })();
 
 </script>

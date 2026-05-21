@@ -1410,8 +1410,22 @@
       </div>
       <div class="ph-banner" id="ph-banner"><span class="em">⚡</span><span id="ph-text">POWER HOUR · 2×</span></div>
       <div class="right">
-        <button class="gear" id="btn-share" title="Share">📤</button>
-        <button class="gear" id="btn-settings" title="Settings">⚙</button>
+        <button class="gear" id="btn-share" title="Share" aria-label="Share">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="18" cy="5" r="3"></circle>
+            <circle cx="6" cy="12" r="3"></circle>
+            <circle cx="18" cy="19" r="3"></circle>
+            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+          </svg>
+        </button>
+        <button class="gear" id="btn-settings" title="Menu" aria-label="Menu">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="4" y1="7" x2="20" y2="7"></line>
+            <line x1="4" y1="12" x2="20" y2="12"></line>
+            <line x1="4" y1="17" x2="20" y2="17"></line>
+          </svg>
+        </button>
       </div>
     </div>
 
@@ -1615,7 +1629,7 @@
    ========================================================= */
 'use strict';
 
-const MX_VERSION = 'v0.3.26';
+const MX_VERSION = 'v0.3.42';
 const MX = {
   token: '',
   distinctId: null,
@@ -2364,7 +2378,10 @@ const SAVE_KEY = 'matryoshka.v1';
 
 const defaultState = () => ({
   settings: { lang: 'en', sound: true, haptics: true },
-  gems: 100,
+  // v0.3.42 — bumped from 100 → 300 so brand-new players have enough
+  // gem balance to actually feel the gem-shop SKUs (cheapest booster is
+  // 60 gems, so 300 = 5 bookkeeping freebies before they need to earn).
+  gems: 300,
   revives: 1,
   undos: 2,
   previews: 0,
@@ -5784,41 +5801,114 @@ function bumpStreakIfNeeded() {
 // and open the Telegram share dialog with the returned URL. Falls back to a
 // text-only share if upload fails (no initData, no server, etc.).
 async function generateShareCard(finalScore, bestTier) {
+  // v0.3.42 — pivot from stylized hero-doll card to actual game-state
+  // snapshot. Players asked for "a picture of the user's game BOX with
+  // all the dolls" — i.e. show the friend EXACTLY what the sender's jar
+  // looks like at the moment they tapped Share. We render the live JAR
+  // + every body in world[] at their current physics positions, scaled
+  // up to fit the 800×800 share canvas. Score banner + branded footer
+  // sit above/below the jar.
   const c = document.createElement('canvas');
   c.width = 800; c.height = 800;
   const cc = c.getContext('2d');
-  // Background
+
+  // Background — same red gradient as before, brand consistency.
   const g = cc.createLinearGradient(0, 0, 0, 800);
   g.addColorStop(0, '#c9162d'); g.addColorStop(1, '#6f0f1f');
   cc.fillStyle = g; cc.fillRect(0, 0, 800, 800);
-  // Frame
+
+  // Outer frame
   cc.strokeStyle = 'rgba(255,213,122,0.8)'; cc.lineWidth = 4;
   cc.strokeRect(24, 24, 752, 752);
-  // Title
+
+  // Title at top
   cc.fillStyle = '#fff'; cc.textAlign = 'center';
-  cc.font = 'bold 56px -apple-system, system-ui, sans-serif';
-  cc.fillText('🪆 MATRYOSHKA', 400, 110);
-  cc.font = 'bold 26px -apple-system, system-ui, sans-serif';
-  cc.fillStyle = '#ffe6c2';
-  cc.fillText(state.mode === 'daily' ? '🌅 Daily Challenge' : 'Drop & Merge', 400, 150);
-  // Centerpiece doll
-  const doll = Math.min(10, Math.max(0, bestTier || 0));
-  drawMatryoshka(cc, 400, 410, 150, doll, 0, 1);
-  // Score
-  cc.fillStyle = '#fff';
-  cc.font = 'bold 40px -apple-system, system-ui, sans-serif';
-  cc.fillText('SCORE', 400, 620);
-  cc.font = 'bold 110px -apple-system, system-ui, sans-serif';
-  cc.fillStyle = '#fdc500';
-  cc.fillText(String(finalScore), 400, 720);
-  // Footer
+  cc.font = 'bold 44px -apple-system, system-ui, sans-serif';
+  cc.fillText('🪆 MATRYOSHKA', 400, 92);
   cc.font = 'bold 22px -apple-system, system-ui, sans-serif';
-  cc.fillStyle = 'rgba(255,255,255,0.75)';
-  cc.fillText('Can you beat me?', 400, 762);
+  cc.fillStyle = '#ffe6c2';
+  cc.fillText(state.mode === 'daily' ? '🌅 Daily Challenge' : 'Drop & Merge', 400, 124);
+
+  // ----- Game-box snapshot -----
+  // JAR is in canvas (game) coords. We scale it up + center it into
+  // the share canvas's middle 560px band so the jar dominates the
+  // image. The same matryoshka rendering function is reused so the
+  // dolls look IDENTICAL to in-game.
+  // Render bounds: wood-plate spans (JAR.left-6, JAR.top-28) →
+  // (JAR.right+6, JAR.bottom+6). We compute the scale to fit that
+  // FULL plate into the band y∈[150, 680].
+  const plateLeft = JAR.left - 6, plateRight = JAR.right + 6;
+  const plateTop = JAR.top - 28,  plateBottom = JAR.bottom + 6;
+  const plateW = plateRight - plateLeft;
+  const plateH = plateBottom - plateTop;
+  const targetMaxW = 620, targetMaxH = 530;
+  const scale = Math.min(targetMaxW / plateW, targetMaxH / plateH);
+  const drawW = plateW * scale;
+  const offsetX = (800 - drawW) / 2 - plateLeft * scale;
+  const offsetY = 150 - plateTop * scale;
+
+  cc.save();
+  cc.translate(offsetX, offsetY);
+  cc.scale(scale, scale);
+
+  // Wood-grain jar backplate (same gradient as drawJar)
+  const wood = cc.createLinearGradient(0, JAR.top - 30, 0, JAR.bottom + 30);
+  wood.addColorStop(0, '#fff8e2');
+  wood.addColorStop(1, '#f5e2b3');
+  cc.fillStyle = wood;
+  roundRect(cc, JAR.left - 6, JAR.top - 28, JAR.right - JAR.left + 12, JAR.bottom - JAR.top + 34, 22);
+  cc.fill();
+  // Inner floor accent
+  cc.fillStyle = 'rgba(0,0,0,0.04)';
+  cc.fillRect(JAR.left, JAR.bottom - 18, JAR.right - JAR.left, 18);
+  // Gold rim
+  cc.strokeStyle = '#e7b53b';
+  cc.lineWidth = 4;
+  cc.beginPath();
+  cc.moveTo(JAR.left - 6, JAR.top - 2);
+  cc.lineTo(JAR.right + 6, JAR.top - 2);
+  cc.stroke();
+  // Border outline
+  cc.strokeStyle = '#b88317';
+  cc.lineWidth = 2;
+  roundRect(cc, JAR.left - 6, JAR.top - 28, JAR.right - JAR.left + 12, JAR.bottom - JAR.top + 34, 22);
+  cc.stroke();
+
+  // Every doll currently in the jar — same renderer used by the live
+  // game loop, so colors, shading, and faces match exactly. Sort by Y
+  // so stacked dolls draw back-to-front correctly.
+  const bodies = (typeof world !== 'undefined' && Array.isArray(world))
+    ? world.slice().sort((a, b) => a.y - b.y)
+    : [];
+  for (const b of bodies) {
+    // Pass the body so facial state (blink/surprise) matches the
+    // live game frame — keeps the snapshot feeling alive.
+    drawMatryoshka(cc, b.x, b.y, b.r, b.tier, b.angle || 0, b.scale || 1, b);
+  }
+
+  // If the world is empty (player pressed Share before dropping a
+  // single doll), fall back to a single hero doll inside the jar so
+  // the image doesn't look broken/empty.
+  if (bodies.length === 0) {
+    const heroTier = Math.min(10, Math.max(0, bestTier || 2));
+    const cx = (JAR.left + JAR.right) / 2;
+    const cy = (JAR.top + JAR.bottom) / 2;
+    drawMatryoshka(cc, cx, cy, 60, heroTier, 0, 1);
+  }
+
+  cc.restore();
+
+  // ----- Score banner (below the jar) -----
+  cc.fillStyle = '#fff';
+  cc.font = 'bold 24px -apple-system, system-ui, sans-serif';
+  cc.fillText('SCORE', 400, 712);
+  cc.font = 'bold 64px -apple-system, system-ui, sans-serif';
+  cc.fillStyle = '#fdc500';
+  cc.fillText(String(finalScore), 400, 764);
+
   // JPEG (not PNG) — Telegram's InlineQueryResultPhoto API requires JPEG.
   // 0.92 quality is high-fidelity (~50-80KB for 800×800) and well under
-  // Telegram's 5MB cap. Was the silent-fail bug that made shares show no
-  // image: savePreparedInlineMessage was rejecting our PNG upload.
+  // Telegram's 5MB cap.
   return c.toDataURL('image/jpeg', 0.92);
 }
 
@@ -5977,6 +6067,34 @@ function renderSkinPicker(container) {
 document.getElementById('btn-share').addEventListener('click', () => {
   if (typeof MX !== 'undefined' && MX.ready) MX.track('Share Button Topbar Tapped');
   shareScore();
+});
+
+// v0.3.42 — gem pill in topbar opens the Shop and scrolls to the "Use
+// your Gems" section so players can actually spend the currency they've
+// been hoarding. Was previously a dead pill (read-only counter).
+document.getElementById('gems-pill').addEventListener('click', () => {
+  if (typeof MX !== 'undefined' && MX.ready) MX.track('Gem Pill Tapped');
+  switchTab('shop');
+  // Scroll after the tab actually mounts. renderShop() is sync but the
+  // DOM reflow from .active toggling needs a frame, so RAF + small
+  // delay is the safest non-jank scroll target.
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      const header = document.querySelector('.gem-shop-header');
+      if (header && header.scrollIntoView) {
+        header.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 60);
+  });
+});
+
+// v0.3.42 — streak pill (the 🔥 in topbar) was a mystery icon to most
+// players ("what is that?"). Now opens the Stats modal which has a
+// "Streak" row + the rest of the per-player stats — gives the click
+// meaning AND surfaces the stats panel one tap shallower.
+document.getElementById('streak-pill').addEventListener('click', () => {
+  if (typeof MX !== 'undefined' && MX.ready) MX.track('Streak Pill Tapped');
+  openStats();
 });
 
 document.getElementById('btn-settings').onclick = () => {
