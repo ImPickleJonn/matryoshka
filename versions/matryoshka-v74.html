@@ -160,10 +160,9 @@
      ========================================================= */
   #canvas-wrap {
     position: absolute;
-    /* Back to 148 (was briefly 196 in v0.3.30 while we tried a
-       horizontal booster row). Vertical rail is back in v0.3.31,
-       so the canvas reclaims those 48 vertical pixels. */
-    top: calc(var(--tg-safe-top) + 148px);
+    /* 148 → 196 in v0.3.30 — booster row now occupies the band that
+       was previously empty between mode-row and canvas. */
+    top: calc(var(--tg-safe-top) + 196px);
     /* CSS absolute positioning ignores the parent's padding — so we can't
        rely on #app's padding-bottom to push us above the bottom tabs. We
        explicitly subtract the tab height + safe-area-bottom here. */
@@ -197,18 +196,22 @@
   .next-pill canvas { display: block; }
 
   /* =========================================================
-     [05a] Booster rail — vertical column on the right side of the
-     jar containing all four boosters (Undo / Hammer / Shake /
-     Rainbow). Pinned to right: 2px (viewport edge) by fitCanvas.
-     Player request v0.3.31: revert from the brief horizontal-row
-     layout back to this vertical stack.
+     [05a] Booster row — horizontal strip BELOW the mode toggle
+     and ABOVE the canvas. All 4 boosters (Undo / Hammer / Shake
+     / Rainbow) live here in one line, equally spaced. Replaces
+     the old vertical right-side rail in v0.3.30.
      ========================================================= */
-  .booster-rail {
+  .booster-row {
     position: absolute;
+    top: calc(var(--tg-safe-top) + 148px);
+    left: 8px; right: 8px;
     z-index: 22;
-    display: flex; flex-direction: column;
-    gap: 6px;
+    display: flex; align-items: center; justify-content: center;
+    gap: 12px;
   }
+  /* Legacy rail still selectable for the unused container in case any
+     extension code references it; just hidden in this version. */
+  .booster-rail { display: none; }
   .booster-btn {
     /* Size dropped 44 → 38 in v0.3.25 so the rail covers less of the jar
        on phones where the canvas fills the wrap width edge-to-edge.
@@ -1017,6 +1020,12 @@
       <button class="mode-pill" data-mode="daily">🌅 <span data-i18n="mode_daily">Daily</span></button>
     </div>
 
+    <div class="booster-row" id="booster-row">
+      <button class="booster-btn" id="btn-undo" title="Undo">↶<span class="count" id="undo-count">0</span></button>
+      <button class="booster-btn" id="btn-hammer" title="Hammer">🔨<span class="count" id="hammer-count">0</span></button>
+      <button class="booster-btn" id="btn-shake" title="Shake">🌀<span class="count" id="shake-count">0</span></button>
+      <button class="booster-btn booster-rainbow" id="btn-rainbow" title="Rainbow Doll">🌈<span class="count" id="rainbow-count">0</span></button>
+    </div>
 
     <div class="score-row">
       <div class="score-side"><div class="num" id="best-score">0</div><div class="lbl" data-i18n="best">Best</div></div>
@@ -1036,12 +1045,6 @@
       <div class="mascot-wrap" id="mascot-wrap">
         <div class="mascot-bubble" id="mascot-bubble"></div>
         <canvas id="mascot-canvas" width="68" height="80"></canvas>
-      </div>
-      <div class="booster-rail" id="booster-rail">
-        <button class="booster-btn" id="btn-undo" title="Undo">↶<span class="count" id="undo-count">0</span></button>
-        <button class="booster-btn" id="btn-hammer" title="Hammer">🔨<span class="count" id="hammer-count">0</span></button>
-        <button class="booster-btn" id="btn-shake" title="Shake">🌀<span class="count" id="shake-count">0</span></button>
-        <button class="booster-btn booster-rainbow" id="btn-rainbow" title="Rainbow Doll">🌈<span class="count" id="rainbow-count">0</span></button>
       </div>
       <div class="booster-cancel-hint" id="booster-hint" style="display:none">Tap a doll · tap again to cancel</div>
     </div>
@@ -3052,7 +3055,7 @@ function doUndo() {
   if (!undoSnapshot) { toast(t('no_undo')); return; }
   if ((state.undos || 0) <= 0) {
     if (typeof MX !== 'undefined') MX.track('Booster Tap Empty', { kind: 'undo' });
-    quickBuyBooster('undo');
+    showBoosterPurchaseModal('undo');
     return;
   }
   state.undos--;
@@ -3121,21 +3124,39 @@ function refreshBoosterHUD() {
   boosterHint.style.display = activeBooster === 'hammer' ? '' : 'none';
 }
 
-// Map booster kind → single-shot SKU. Tapping an empty booster
-// jumps STRAIGHT to Telegram's Stars payment sheet via buySku() —
-// no intermediate popup. Player feedback: "direct purchase fast,
-// no popup."
-const BOOSTER_SINGLE_SKU = {
-  hammer:  'hammer_single',
-  shake:   'shake_single',
-  rainbow: 'rainbow_single',
-  undo:    'undo_single',
+// Show a small Stars-purchase modal when the player taps an empty
+// booster. Two options: single-shot at single-pack price, or full
+// pack at pack price. Both go through the existing buySku flow.
+const BOOSTER_PURCHASE_CONFIG = {
+  hammer:  { icon: '🔨', name: 'Hammer',       single_sku: 'hammer_single',  single_price: 20,  pack_sku: 'hammer_pack',  pack_price: 80,  pack_qty: 5 },
+  shake:   { icon: '🌀', name: 'Shake',        single_sku: 'shake_single',   single_price: 15,  pack_sku: 'shake_pack',   pack_price: 60,  pack_qty: 5 },
+  rainbow: { icon: '🌈', name: 'Rainbow Doll', single_sku: 'rainbow_single', single_price: 45,  pack_sku: 'rainbow_pack', pack_price: 120, pack_qty: 3 },
+  undo:    { icon: '↶',  name: 'Undo',         single_sku: 'undo_single',    single_price: 15,  pack_sku: 'undo_pack',    pack_price: 60,  pack_qty: 5 },
 };
-function quickBuyBooster(kind) {
-  const sku = BOOSTER_SINGLE_SKU[kind];
-  if (!sku) return;
-  if (typeof MX !== 'undefined' && MX.ready) MX.track('Booster Quick Buy', { kind, sku });
-  buySku(sku);
+function showBoosterPurchaseModal(kind) {
+  const cfg = BOOSTER_PURCHASE_CONFIG[kind];
+  if (!cfg) return;
+  if (typeof MX !== 'undefined' && MX.ready) MX.track('Booster Purchase Prompt', { kind });
+  const body = document.getElementById('modal-body');
+  body.innerHTML = `
+    <h3>${cfg.icon} Out of ${cfg.name}</h3>
+    <div class="sub">Grab one quick — or grab a pack and save.</div>
+    <div class="modal-btns">
+      <button class="btn" id="m-buy-single">
+        <span style="font-size:18px;margin-right:4px">${cfg.icon}</span>
+        Buy 1 · ${cfg.single_price} ⭐
+      </button>
+      <button class="btn" id="m-buy-pack">
+        <span style="font-size:18px;margin-right:4px">${cfg.icon}</span>
+        Buy ×${cfg.pack_qty} pack · ${cfg.pack_price} ⭐ <span style="opacity:0.6;font-size:11px">(save ${Math.round((1 - cfg.pack_price / (cfg.pack_qty * cfg.single_price)) * 100)}%)</span>
+      </button>
+      <button class="btn ghost" id="m-buy-cancel">Cancel</button>
+    </div>
+  `;
+  document.getElementById('modal-shade').classList.add('show');
+  document.getElementById('m-buy-single').onclick = () => { hideModal(); buySku(cfg.single_sku); };
+  document.getElementById('m-buy-pack').onclick = () => { hideModal(); buySku(cfg.pack_sku); };
+  document.getElementById('m-buy-cancel').onclick = hideModal;
 }
 
 function setActiveBooster(name) {
@@ -3146,7 +3167,7 @@ function setActiveBooster(name) {
 hammerBtn.addEventListener('click', () => {
   if ((state.hammers || 0) <= 0) {
     if (typeof MX !== 'undefined') MX.track('Booster Tap Empty', { kind: 'hammer' });
-    quickBuyBooster('hammer');
+    showBoosterPurchaseModal('hammer');
     return;
   }
   if (!running) return;
@@ -3157,7 +3178,7 @@ hammerBtn.addEventListener('click', () => {
 shakeBtn.addEventListener('click', () => {
   if ((state.shakes || 0) <= 0) {
     if (typeof MX !== 'undefined') MX.track('Booster Tap Empty', { kind: 'shake' });
-    quickBuyBooster('shake');
+    showBoosterPurchaseModal('shake');
     return;
   }
   if (!running) return;
@@ -3183,7 +3204,7 @@ rainbowBtn.addEventListener('click', () => {
   }
   if ((state.rainbows || 0) <= 0) {
     if (typeof MX !== 'undefined') MX.track('Booster Tap Empty', { kind: 'rainbow' });
-    quickBuyBooster('rainbow');
+    showBoosterPurchaseModal('rainbow');
     return;
   }
   state.rainbows--;
@@ -5105,13 +5126,8 @@ function fitCanvas() {
     mascotBubble.style.left = '46px';
     mascotBubble.style.bottom = '78px';
   }
-  // Booster rail — pinned to the wrap's right edge with a 2px buffer.
-  // Vertically centered on the canvas.
-  const rail = document.getElementById('booster-rail');
-  if (rail) {
-    rail.style.right = '2px';
-    rail.style.top = (canvasRect.top - rect.top + (canvasRect.height - rail.offsetHeight) / 2) + 'px';
-  }
+  // Booster row is now CSS-positioned (top: safe-top + 148px), no JS
+  // positioning needed. v0.3.30 retired the vertical rail.
   // Cancel hint: just above the canvas top
   const hint = document.getElementById('booster-hint');
   if (hint) {
