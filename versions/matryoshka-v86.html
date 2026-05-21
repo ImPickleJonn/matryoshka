@@ -132,10 +132,7 @@
      [03b] Mode toggle (Endless / Daily)
      ========================================================= */
   .mode-row {
-    /* v0.3.38 — DAILY mode hidden; only ENDLESS is supported for now.
-       Code paths preserved so we can re-enable later by dropping the
-       display:none below. */
-    display: none !important;
+    /* 102 → 116 in v0.3.12 — follows the score-row's new position. */
     position: absolute; top: calc(var(--tg-safe-top) + 116px);
     left: 0; right: 0;
     display: flex; justify-content: center; gap: 4px;
@@ -597,94 +594,46 @@
      20-step track is now TWO VERTICAL LANES side-by-side (Free
      left, ★ Premium right) with steps stacked top-to-bottom.
      ========================================================= */
-  /* Play-screen strip — sits between mode-row and canvas-wrap.
-     v0.3.38 — daily mode hidden so mode-row is gone; strip stays at
-     the same absolute position. */
+  /* Play-screen strip — sits between mode-row and canvas-wrap */
   .season-strip {
     position: absolute;
     top: calc(var(--tg-safe-top) + 148px);
     left: 8px; right: 8px;
     z-index: 24;
-    height: 32px;
-    background: rgba(0,0,0,0.22);
-    border: 1px solid rgba(255,213,122,0.5);
+    height: 30px;
+    background: rgba(0,0,0,0.18);
+    border: 1px solid rgba(255,213,122,0.45);
     border-radius: 999px;
     padding: 0 10px;
     color: #fff;
     display: flex; align-items: center; gap: 8px;
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
-    transition: box-shadow 0.3s ease, border-color 0.3s ease, background 0.3s ease;
   }
   .season-strip:active { transform: scale(0.98); }
   .season-strip-label {
     font-size: 11px; font-weight: 800;
     letter-spacing: 0.5px;
     white-space: nowrap;
-    display: flex; align-items: center; gap: 3px;
-  }
-  .season-strip-star {
-    display: none;
-    font-size: 14px;
-    color: #fdc500;
-    text-shadow: 0 0 6px rgba(253,197,0,0.7);
-    margin-right: 2px;
   }
   .season-strip-bar {
     flex: 1; min-width: 40px;
-    height: 14px;
+    height: 8px;
     background: rgba(255,255,255,0.18);
     border-radius: 999px;
     overflow: hidden;
-    position: relative;
   }
   .season-strip-fill {
     height: 100%; width: 0%;
     background: linear-gradient(90deg, #ffd84d 0%, #f5b300 50%, #e76f51 100%);
     border-radius: 999px;
-    transition: width 0.45s cubic-bezier(.34, 1.56, .64, 1);
-  }
-  /* Next-reward icon overlaid at the right end of the bar */
-  .season-strip-next-reward {
-    position: absolute;
-    right: 2px; top: 50%; transform: translateY(-50%);
-    z-index: 2;
-    background: rgba(0,0,0,0.55);
-    color: #fff;
-    font-size: 10px; font-weight: 800;
-    padding: 1px 5px;
-    border-radius: 999px;
-    border: 1px solid rgba(255,255,255,0.35);
-    line-height: 1.2;
-    pointer-events: none;
-    white-space: nowrap;
+    transition: width 0.4s ease;
   }
   .season-strip-pts {
     font-size: 10px; font-weight: 800;
     font-variant-numeric: tabular-nums;
     color: #ffe6c2;
     white-space: nowrap;
-  }
-  /* PREMIUM variant — gold star prefix, glowing border, premium-gradient bar */
-  .season-strip.premium {
-    border-color: #fdc500;
-    background: linear-gradient(135deg, rgba(108,46,181,0.55) 0%, rgba(247,37,133,0.35) 50%, rgba(0,0,0,0.25) 100%);
-    box-shadow: 0 0 14px rgba(253,197,0,0.55), inset 0 0 8px rgba(253,197,0,0.18);
-    animation: season-strip-glow 2.4s ease-in-out infinite;
-  }
-  @keyframes season-strip-glow {
-    0%, 100% { box-shadow: 0 0 10px rgba(253,197,0,0.4), inset 0 0 6px rgba(253,197,0,0.15); }
-    50%      { box-shadow: 0 0 18px rgba(253,197,0,0.75), inset 0 0 10px rgba(253,197,0,0.25); }
-  }
-  .season-strip.premium .season-strip-star { display: inline-flex; }
-  .season-strip.premium .season-strip-fill {
-    background: linear-gradient(90deg, #fdc500 0%, #f72585 50%, #9b5de5 100%);
-  }
-  .season-strip.premium .season-strip-next-reward {
-    background: linear-gradient(135deg, #fdc500 0%, #f5b300 100%);
-    color: #2b0a10;
-    border-color: #fff5d2;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
   }
 
   /* Full-screen Season Pass modal */
@@ -1403,11 +1352,8 @@
     </div>
 
     <button class="season-strip" id="season-strip">
-      <div class="season-strip-label"><span class="season-strip-star" id="season-strip-star"></span>🎟 <span data-i18n="season_pass_title">Season Pass</span></div>
-      <div class="season-strip-bar">
-        <div class="season-strip-fill" id="season-strip-fill"></div>
-        <div class="season-strip-next-reward" id="season-strip-next-reward"></div>
-      </div>
+      <div class="season-strip-label">🎟 <span data-i18n="season_pass_title">Season Pass</span></div>
+      <div class="season-strip-bar"><div class="season-strip-fill" id="season-strip-fill"></div></div>
       <div class="season-strip-pts" id="season-strip-pts">0 / 100</div>
     </button>
 
@@ -2392,9 +2338,6 @@ function load() {
     state = Object.assign(defaultState(), parsed);
     state.settings = Object.assign({ lang: detectLang(), sound: true, haptics: true }, parsed.settings || {});
   } catch (e) { state = defaultState(); state.settings.lang = detectLang(); }
-  // v0.3.38: daily mode is hidden — force endless until we decide to
-  // re-enable. Stored 'daily' from older saves gets normalized here.
-  state.mode = 'endless';
 }
 let saveDebounce;
 function save() {
@@ -3311,12 +3254,6 @@ function addScore(n) {
   mergeCount++;
   document.getElementById('cur-score').textContent = score;
   document.getElementById('merge-count').textContent = mergeCount;
-  // v0.3.38 — accumulate live into season points so the Season Pass
-  // strip fills in real-time as the player merges, not only at game-over.
-  if (n > 0) {
-    addSeasonPoints(n);
-    refreshSeasonStrip();
-  }
 }
 
 function render() {
@@ -3961,10 +3898,12 @@ function endGame() {
     if (wasBest) state.best = score;
   }
   document.getElementById('best-score').textContent = state.mode === 'daily' ? (state.dailyBestToday || 0) : (state.best || 0);
-  // Season pass: addSeasonPoints fired live inside addScore() during the
-  // game, so state.season.points is already current. seasonPointsBeforeGame
-  // was captured at newGame() so the snapshot animates from before→after.
+  // Season pass: capture the pre-score point total, accumulate, then
+  // the showGameOverModal snapshot section will animate from this old
+  // value to the new value.
   ensureSeasonFresh();
+  seasonPointsBeforeGame = state.season.points || 0;
+  addSeasonPoints(score);
   refreshSeasonStrip();
   checkAchievements();
   // Analytics: Game Ended with all the key signals for cohort analysis
@@ -4261,12 +4200,6 @@ function doRevive() {
 }
 
 function newGame() {
-  // Capture the pre-game season points so the game-over snapshot can
-  // show the delta accumulated during this run. Season points now
-  // accumulate live in addScore() so by end-game state.season.points
-  // is already current — we need the BEFORE value snapshotted here.
-  ensureSeasonFresh();
-  seasonPointsBeforeGame = (state.season && state.season.points) || 0;
   // Analytics: Game Started — track mode + cumulative context so we
   // can compute average score / tier / duration per session in Mixpanel.
   if (typeof MX !== 'undefined' && MX.ready) {
@@ -5292,15 +5225,10 @@ function refreshSeasonStrip() {
   ensureSeasonFresh();
   const s = state.season;
   const pts = s.points || 0;
-  const isPremium = !!s.premium;
   const nextStep = SEASON_PASS_STEPS.find(st => pts < st.threshold);
   const nextThreshold = nextStep ? nextStep.threshold : SEASON_TOTAL_TARGET;
-  const stripEl = document.getElementById('season-strip');
   const fill = document.getElementById('season-strip-fill');
   const ptsEl = document.getElementById('season-strip-pts');
-  const nextRewardEl = document.getElementById('season-strip-next-reward');
-  // Premium variant on the strip — gold star + glow + premium-gradient bar
-  if (stripEl) stripEl.classList.toggle('premium', isPremium);
   if (fill) {
     // Bar shows progress between previous step threshold and next step
     // threshold, so each step earns a visible chunk of bar growth.
@@ -5314,21 +5242,6 @@ function refreshSeasonStrip() {
   if (ptsEl) {
     ptsEl.textContent = pts.toLocaleString() + ' / ' + nextThreshold.toLocaleString();
   }
-  if (nextRewardEl) {
-    if (nextStep) {
-      // Premium owners see what they'll get in the PRO lane; free players
-      // see the FREE lane reward at the same step.
-      const reward = isPremium ? nextStep.premium : nextStep.free;
-      nextRewardEl.textContent = formatSeasonReward(reward);
-      nextRewardEl.style.display = '';
-    } else {
-      nextRewardEl.textContent = '👑';   // maxed out
-      nextRewardEl.style.display = '';
-    }
-  }
-  // v0.3.38 — also pulse the gem pill if the season strip has unclaimed
-  // rewards waiting (visual nudge). Skipped here to keep refresh cheap;
-  // the snapshot card in game-over already calls this out.
 }
 
 function renderSeasonPass() {
