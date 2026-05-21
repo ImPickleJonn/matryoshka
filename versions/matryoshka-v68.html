@@ -3642,71 +3642,22 @@ async function buyRevive(expectedPrice) {
 }
 
 function doRevive() {
-  // v0.3.28 — revive clears roughly HALF the dolls instead of just 3.
-  // Old logic was way too stingy for a 25⭐ purchase (or even a free
-  // inventory revive); player paid to continue and got 3 dolls cleared,
-  // immediately landing back in the death zone.
-  //
-  // New logic in two passes:
-  //   1. Every doll in the danger zone (any part above death line) is
-  //      cleared FIRST — guarantees survival, otherwise the revive
-  //      could fail to remove the threat and instantly re-game-over.
-  //   2. If that doesn't hit half-of-world yet, fill the remaining
-  //      quota with random non-danger dolls.
-  // So total cleared ≥ half, more if the danger zone was busy.
-  const n = world.length;
-  const halfTarget = Math.max(3, Math.ceil(n / 2));   // never less than 3 even on tiny jars
-
-  const dangerDolls = world.filter(b => !b.merged && (b.y - b.r * 0.4) < JAR.deathLineY);
-  const dangerSet = new Set(dangerDolls);
-
-  const safeDolls = world.filter(b => !b.merged && !dangerSet.has(b));
-  // Fisher-Yates shuffle of the safe list
-  for (let i = safeDolls.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    const tmp = safeDolls[i]; safeDolls[i] = safeDolls[j]; safeDolls[j] = tmp;
-  }
-  const remaining = Math.max(0, halfTarget - dangerDolls.length);
-  const randomDolls = safeDolls.slice(0, remaining);
-  const toClear = dangerDolls.concat(randomDolls);
-
-  // Big particle burst on each cleared doll — celebrate the second-chance
+  // Clear the top 3 dolls that are highest in the jar
+  const sorted = world.slice().sort((a, b) => a.y - b.y);
+  const toClear = sorted.slice(0, 3);
   for (const b of toClear) {
-    spawnParticles(b.x, b.y, 26, getPalette(b.tier).body, 1.4);
-    spawnParticles(b.x, b.y, 8, '#fdc500', 1.6);
+    spawnParticles(b.x, b.y, 22, getPalette(b.tier).body, 1.2);
     b.merged = true;
   }
-  // Crown the revive with a center-of-jar gold flash + screen shake
-  const cx = (JAR.left + JAR.right) / 2;
-  const cy = (JAR.top + JAR.bottom) / 2;
-  spawnParticles(cx, cy, 32, '#fdc500', 1.8);
-  spawnParticles(cx, cy, 18, '#4ad3ad', 1.4);
-
   for (let i = world.length - 1; i >= 0; i--) if (world[i].merged) world.splice(i, 1);
+  // Reset resting frames on remaining
   for (const b of world) b.restingFrames = 0;
-  dangerLevel = 0;
-  kickShake(20);
-
   running = true;
   gameRevived = true;
   carrier = null;
   spawnCarrier();
-  toast(t('revive_used') + ' · ' + toClear.length + ' cleared');
-  // Layered triumphant audio
-  tone(440, 0.10, 'triangle', 0.14);
-  setTimeout(() => tone(660, 0.10, 'triangle', 0.14), 80);
-  setTimeout(() => tone(880, 0.18, 'triangle', 0.14), 160);
-  setTimeout(() => tone(1320, 0.22, 'sine', 0.12), 260);
-
-  if (typeof MX !== 'undefined' && MX.ready) {
-    MX.track('Booster Used', {
-      kind: 'revive',
-      cleared: toClear.length,
-      danger_cleared: dangerDolls.length,
-      random_cleared: randomDolls.length,
-      world_size_before: n,
-    });
-  }
+  toast(t('revive_used'));
+  if (typeof MX !== 'undefined' && MX.ready) MX.track('Booster Used', { kind: 'revive' });
 }
 
 function newGame() {
