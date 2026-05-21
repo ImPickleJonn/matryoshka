@@ -207,17 +207,14 @@
     gap: 8px;
   }
   .booster-btn {
-    /* Size dropped 44 → 38 in v0.3.25 so the rail covers less of the jar
-       on phones where the canvas fills the wrap width edge-to-edge.
-       Still well above the 32px minimum-tap-target rule of thumb. */
-    width: 38px; height: 38px;
-    border-radius: 12px;
+    width: 44px; height: 44px;
+    border-radius: 14px;
     background: linear-gradient(180deg, #fff 0%, #fce6c2 100%);
     border: 1.5px solid #e7b53b;
     box-shadow: 0 3px 6px rgba(118,72,28,0.18);
     color: var(--ink);
     display: flex; align-items: center; justify-content: center;
-    font-size: 18px;
+    font-size: 22px;
     cursor: pointer;
     position: relative;
     transition: transform 0.12s ease;
@@ -229,14 +226,12 @@
   }
   .booster-btn .count {
     position: absolute;
-    /* Slightly tighter than the old (-3, -3) so the badge doesn't add
-       extra visual footprint past the button edge. */
-    bottom: -2px; right: -2px;
+    bottom: -3px; right: -3px;
     background: var(--ink); color: #fff;
-    font-size: 9px; font-weight: 800;
+    font-size: 10px; font-weight: 800;
     border-radius: 999px;
-    min-width: 15px; height: 15px;
-    padding: 0 3px;
+    min-width: 17px; height: 17px;
+    padding: 0 4px;
     display: inline-flex; align-items: center; justify-content: center;
     line-height: 1;
     box-shadow: 0 1px 3px rgba(0,0,0,0.3);
@@ -5004,18 +4999,10 @@ function fitCanvas() {
     mascotBubble.style.left = '46px';
     mascotBubble.style.bottom = '78px';
   }
-  // Booster rail: pinned to the wrap's right edge (i.e., the viewport
-  // right edge — the wrap is left:0 right:0). The 2px offset keeps the
-  // rail from kissing the device bezel on no-margin phones. v0.3.25:
-  // was anchored 4px to the LEFT of canvas right, which covered ~50px
-  // of the playable jar area when canvas filled the wrap width on
-  // phones. Now buttons hug the very right edge of the screen, only
-  // overhanging the jar by the button width (38px) — and since the
-  // jar's right wall is at logical x=346 of a 360-wide canvas, the
-  // play area lost is just the ~14px right margin of the jar.
+  // Booster rail: right edge of the jar, vertically centered.
   const rail = document.getElementById('booster-rail');
   if (rail) {
-    rail.style.right = '2px';
+    rail.style.right = (rect.right - canvasRect.right + 4) + 'px';
     rail.style.top = (canvasRect.top - rect.top + (canvasRect.height - rail.offsetHeight) / 2) + 'px';
   }
   // Cancel hint: just above the booster rail
