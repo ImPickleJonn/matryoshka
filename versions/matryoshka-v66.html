@@ -3539,13 +3539,7 @@ function showGameOverModal(wasBest) {
       <button class="btn ghost" id="m-share">📤 Share</button>
     </div>
   `;
-  // Lock the backdrop — game over should be terminal-action only. Player
-  // must explicitly tap revive / play again / share to dismiss. Accidental
-  // backdrop taps shouldn't drop them onto a frozen game with the modal
-  // gone and no way to continue.
-  const shade = document.getElementById('modal-shade');
-  shade.classList.add('show');
-  shade.classList.add('locked');
+  document.getElementById('modal-shade').classList.add('show');
   if (hasFreeRevive) {
     document.getElementById('m-revive-free').onclick = () => {
       state.revives--;
@@ -4946,20 +4940,10 @@ document.getElementById('btn-settings').onclick = () => {
 };
 
 function hideModal() {
-  const shade = document.getElementById('modal-shade');
-  shade.classList.remove('show');
-  // Clear the lock flag every time the modal closes so the next modal
-  // starts in the default (backdrop-closable) state. Each modal opener
-  // re-adds .locked if it needs the more aggressive lock.
-  shade.classList.remove('locked');
+  document.getElementById('modal-shade').classList.remove('show');
 }
 document.getElementById('modal-shade').addEventListener('click', (e) => {
-  // Backdrop tap only closes if the shade is NOT in locked mode. The
-  // game-over modal sets .locked to force the player into an explicit
-  // action (revive / play again / share) — no accidental dismissal.
-  if (e.target.id === 'modal-shade' && !e.currentTarget.classList.contains('locked')) {
-    hideModal();
-  }
+  if (e.target.id === 'modal-shade') hideModal();
 });
 
 let toastTimer;
