@@ -6184,6 +6184,9 @@ function openFtueIfFirst() {
     } catch (e) {}
   }
   requestAnimationFrame(gameTick);
+  // Paint the Season Pass progress strip on boot so it shows real points
+  // (and current next-step threshold) instead of the "0 / 100" default.
+  refreshSeasonStrip();
   // Retroactively claim any pre-v0.3.7 achievements that were unlocked
   // but never tapped — players assumed the "+N 💎" toast meant the gems
   // had already landed (now they do, but this fixes accounts created
