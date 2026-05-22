@@ -1178,7 +1178,7 @@ app.get('/api/diag', async (req, res) => {
     if (st.lastActiveAt && (now - st.lastActiveAt) < 7 * 24 * 60 * 60 * 1000) activeLastWeek++;
   }
   const out = {
-    version: 'v0.3.43',
+    version: 'v0.3.50',
     bot_token_configured: !!BOT_TOKEN,
     bot_username: BOT_USERNAME || null,
     public_url: getPublicUrl() || null,
@@ -1186,6 +1186,7 @@ app.get('/api/diag', async (req, res) => {
     data_dir_writable: false,
     leaderboard_entries: leaderboard.regular.length,
     user_state_count: userState.size,
+    users_json_count: Object.keys(users).length,
     notif_users_with_chatid: withChatId,
     notif_active_last_day: activeLastDay,
     notif_active_last_week: activeLastWeek,
@@ -1837,12 +1838,37 @@ app.post('/api/admin/notify-broadcast', async (req, res) => {
     return res.status(400).json({ error: 'unknown kind',
       available: Object.keys(NOTIF_COPY) });
   }
-  // Build audience: every user in userState that has a chatId.
-  let audience = [];
+  // v0.3.50 — Broadcast audience now unions THREE sources:
+  //   1. userState  — users with a recent chatId from /api/heartbeat
+  //   2. users.json — users who have synced game state via /api/state/save
+  //   3. Optional include_all_known via Mixpanel distinct_ids (TBD; for
+  //      now we rely on 1+2 since leaderboard submitters typically end
+  //      up in users.json anyway).
+  // Key insight: a Telegram user_id IS their private-chat ID for bot DMs.
+  // So even if we never captured an explicit chatId via heartbeat, we can
+  // use the user_id directly as chatId. Telegram returns "Forbidden: bot
+  // can't initiate conversation with a user" for anyone who never /start-ed
+  // the bot — captured cleanly by lastBroadcast.errors.
+  const audienceMap = new Map();
+  // Source 1: userState — preserves lang preference
   for (const [uid, st] of userState) {
     if (!st.chatId) continue;
-    audience.push({ uid, chatId: st.chatId, lang: st.lang || 'en' });
+    audienceMap.set(String(uid), {
+      uid: Number(uid) || uid, chatId: st.chatId, lang: st.lang || 'en', source: 'userState'
+    });
   }
+  // Source 2: users.json — fallback chatId = user_id, lang defaults 'en'
+  for (const uidStr of Object.keys(users)) {
+    if (audienceMap.has(uidStr)) continue;
+    const uidNum = Number(uidStr);
+    if (!uidNum || isNaN(uidNum)) continue;
+    audienceMap.set(uidStr, {
+      uid: uidNum, chatId: uidNum,
+      lang: (users[uidStr] && users[uidStr].settings && users[uidStr].settings.lang) || 'en',
+      source: 'users.json'
+    });
+  }
+  let audience = Array.from(audienceMap.values());
   if (Array.isArray(only_user_ids) && only_user_ids.length) {
     const set = new Set(only_user_ids.map(String));
     audience = audience.filter(a => set.has(String(a.uid)));
