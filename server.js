@@ -1522,13 +1522,20 @@ async function sendNotification(chatId, lang, kind, ctx) {
     ]],
   };
   const gif = pickGif(kind);
-  // Helper: fire server-side Notification Sent event when delivery
-  // succeeds, so the Mixpanel funnel sent→opened→game-started works.
+  // Helper: fire server-side Notification Sent / Failed events.
+  // v0.3.49 — added Failed event so we can see "8 sent, 2 delivered,
+  // 6 blocked" via Mixpanel (or via /api/admin/last-broadcast endpoint).
   const fireSent = (mode) => {
     mpTrack('Notification Sent', String(chatId), {
       kind, mode, gif: gif || null,
       lang: String(lang || 'en').slice(0, 2),
       has_ctx: !!(ctx && Object.keys(ctx).length),
+    });
+  };
+  const fireFailed = (mode, reason) => {
+    mpTrack('Notification Failed', String(chatId), {
+      kind, mode, reason: String(reason || 'unknown').slice(0, 200),
+      lang: String(lang || 'en').slice(0, 2),
     });
   };
   // Try animation first; fall back to text-only if Telegram rejects the GIF
@@ -1560,9 +1567,18 @@ async function sendNotification(chatId, lang, kind, ctx) {
       }),
     });
     const j = await r.json();
-    if (j && j.ok) fireSent('text');
-    return { ok: !!(j && j.ok), mode: 'text', reason: j && !j.ok && j.description };
-  } catch (e) { return { ok: false, reason: e.message }; }
+    if (j && j.ok) {
+      fireSent('text');
+      return { ok: true, mode: 'text' };
+    } else {
+      const reason = (j && j.description) || 'unknown';
+      fireFailed('text', reason);
+      return { ok: false, mode: 'text', reason };
+    }
+  } catch (e) {
+    fireFailed('text', e.message);
+    return { ok: false, reason: e.message };
+  }
 }
 
 const ONE_HOUR = 60 * 60 * 1000;
@@ -1807,6 +1823,10 @@ app.post('/api/admin/notify-fire', async (req, res) => {
 //
 // Limit to N test recipients (random sample):
 //   curl ... -d '{"kind":"beat_your_score","dry_run":false,"limit":10}'
+// v0.3.49 — module-level tracker. Updated by broadcast endpoint as the
+// run progresses. Surveyable via GET /api/admin/last-broadcast.
+let lastBroadcast = null;
+
 app.post('/api/admin/notify-broadcast', async (req, res) => {
   if (!BOT_TOKEN) return res.status(500).json({ error: 'BOT_TOKEN not set' });
   if (req.headers['x-setup-key'] !== BOT_TOKEN) {
@@ -1828,7 +1848,6 @@ app.post('/api/admin/notify-broadcast', async (req, res) => {
     audience = audience.filter(a => set.has(String(a.uid)));
   }
   if (typeof limit === 'number' && limit > 0) {
-    // Shuffle then take N — random sample for test cohorts
     for (let i = audience.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [audience[i], audience[j]] = [audience[j], audience[i]];
@@ -1836,7 +1855,6 @@ app.post('/api/admin/notify-broadcast', async (req, res) => {
     audience = audience.slice(0, limit);
   }
   if (dry_run) {
-    // Preview ctx for a few users so admin can sanity-check copy
     const preview = audience.slice(0, 5).map(a => ({
       uid: a.uid, chatId: a.chatId, lang: a.lang,
       ctx: buildCtxForUser(a.uid, ctx),
@@ -1844,23 +1862,61 @@ app.post('/api/admin/notify-broadcast', async (req, res) => {
     }));
     return res.json({ ok: true, dry_run: true, would_send_to: audience.length, sample_preview: preview });
   }
-  // Pace at ~20 sends/sec (50ms gap) — comfortably under Telegram's
-  // 30/sec global rate limit. For huge bases (>10k) this still finishes
-  // in a few minutes and won't trip any 429s.
-  let sent = 0, failed = 0;
+  // Initialize broadcast tracker BEFORE returning the HTTP response so
+  // /api/admin/last-broadcast can report progress while the loop runs.
+  lastBroadcast = {
+    kind,
+    started_at: new Date().toISOString(),
+    finished_at: null,
+    audience: audience.length,
+    sent: 0,
+    failed: 0,
+    in_progress: 0,
+    errors: {},          // { 'Forbidden: bot was blocked by the user': 3, ... }
+    failed_uids: [],     // [{uid, reason}, ...]
+    sent_uids: [],
+  };
   // Fire-and-forget at the HTTP level — return audience count immediately,
   // let the broadcast continue in the background.
   res.json({ ok: true, broadcast_started: true, audience: audience.length, kind });
   (async () => {
+    lastBroadcast.in_progress = audience.length;
     for (const a of audience) {
       const resolvedCtx = buildCtxForUser(a.uid, ctx);
       const resolvedKind = resolveKindForUser(kind, resolvedCtx);
       const result = await sendNotification(a.chatId, a.lang, resolvedKind, resolvedCtx);
-      if (result.ok) sent++; else failed++;
+      lastBroadcast.in_progress--;
+      if (result.ok) {
+        lastBroadcast.sent++;
+        lastBroadcast.sent_uids.push(a.uid);
+      } else {
+        lastBroadcast.failed++;
+        const reason = (result.reason || 'unknown').slice(0, 120);
+        lastBroadcast.errors[reason] = (lastBroadcast.errors[reason] || 0) + 1;
+        lastBroadcast.failed_uids.push({ uid: a.uid, reason });
+      }
       await new Promise(r => setTimeout(r, 50));   // ~20/sec pace
     }
-    console.log('[broadcast] kind=' + kind + ' sent=' + sent + ' failed=' + failed + ' total=' + audience.length);
-  })().catch(e => console.error('[broadcast] error:', e.message));
+    lastBroadcast.finished_at = new Date().toISOString();
+    console.log('[broadcast] kind=' + kind +
+                ' sent=' + lastBroadcast.sent +
+                ' failed=' + lastBroadcast.failed +
+                ' total=' + audience.length);
+  })().catch(e => {
+    console.error('[broadcast] error:', e.message);
+    if (lastBroadcast) lastBroadcast.error = e.message;
+  });
+});
+
+// v0.3.49 — report on the most recent broadcast. Curl-friendly:
+//   curl https://.../api/admin/last-broadcast -H "x-setup-key: $BOT_TOKEN"
+// Returns null-shape if no broadcast has run since last server restart.
+app.get('/api/admin/last-broadcast', (req, res) => {
+  if (!BOT_TOKEN) return res.status(500).json({ error: 'BOT_TOKEN not set' });
+  if (req.headers['x-setup-key'] !== BOT_TOKEN) {
+    return res.status(403).json({ error: 'wrong setup key' });
+  }
+  res.json(lastBroadcast || { ok: false, error: 'no broadcast since last restart' });
 });
 
 // Admin-only: snapshot of notification state — who's eligible, last fires,
