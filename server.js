@@ -546,7 +546,28 @@ function getPublicUrl() {
   if (d && d.includes('.')) return /^https?:\/\//i.test(d) ? d : 'https://' + d;
   return PUBLIC_URL_OBSERVED;
 }
-function buildPlayUrl() { return getPublicUrl() || 'http://localhost:' + PORT; }
+// v0.3.46 — buildPlayUrl now accepts optional attribution params that
+// become query-string args on the Mini App URL. Telegram preserves the
+// query string when opening web_app buttons, so the client can read
+// window.location.search on boot and emit a Mixpanel `Notification
+// Opened` event tagged with the originating notification kind.
+//
+// Example: buildPlayUrl({ source: 'notif', campaign: 'streak_risk' })
+//   → https://matryoshka-zlp6.onrender.com/?utm_source=notif&utm_campaign=streak_risk&fired_at=1779...
+function buildPlayUrl(attrib) {
+  const base = getPublicUrl() || 'http://localhost:' + PORT;
+  if (!attrib || typeof attrib !== 'object') return base;
+  const params = new URLSearchParams();
+  if (attrib.source)   params.set('utm_source', String(attrib.source));
+  if (attrib.medium)   params.set('utm_medium', String(attrib.medium));
+  if (attrib.campaign) params.set('utm_campaign', String(attrib.campaign));
+  if (attrib.content)  params.set('utm_content', String(attrib.content));
+  // Stamping the fire time helps us measure click-to-open latency in
+  // Mixpanel (open_ts - fired_at = latency in ms).
+  params.set('fired_at', String(Date.now()));
+  const qs = params.toString();
+  return qs ? base + '?' + qs : base;
+}
 
 app.use(express.static(__dirname, {
   setHeaders: (res, filePath) => {
@@ -1214,6 +1235,37 @@ app.post('/api/setup-webhook', async (req, res) => {
   } catch (e) { res.status(500).json({ error: String(e && e.message || e) }); }
 });
 
+// ============ Server-side Mixpanel (v0.3.46) ============
+// Lightweight HTTP-only Mixpanel tracker so the server can emit
+// `Notification Sent` events. Combined with the client-side
+// `Notification Opened` event (fired on boot when ?utm_source=notif),
+// this gives us a 3-step funnel in Mixpanel:
+//   Notification Sent  →  Notification Opened  →  Game Started
+// Without server-side fire, we'd only see opens (not the delivery base),
+// and click-through rate would be unmeasurable.
+const MIXPANEL_TOKEN = process.env.MIXPANEL_TOKEN || '';
+function mpTrack(eventName, distinctId, props) {
+  if (!MIXPANEL_TOKEN) return;
+  try {
+    const body = {
+      event: eventName,
+      properties: Object.assign({
+        token: MIXPANEL_TOKEN,
+        distinct_id: distinctId ? String(distinctId) : 'server',
+        time: Math.floor(Date.now() / 1000),
+        $insert_id: crypto.randomBytes(8).toString('hex'),
+      }, props || {}),
+    };
+    const dataParam = Buffer.from(JSON.stringify(body)).toString('base64');
+    // ip=1 tells Mixpanel to resolve geo from the request — but this is a
+    // server-side fire, so geo will be the Render datacenter, not the user.
+    // Skip ip=1 here; if you want user geo on server events, look up
+    // the user's last-known $country_code from a prior client event.
+    fetch('https://api.mixpanel.com/track?data=' + dataParam, { method: 'GET' })
+      .catch(() => {});
+  } catch (e) {}
+}
+
 // ============ Notifications (v0.3.43 robust system) ============
 // Every notification fires through sendNotification(chatId, lang, kind, ctx)
 // which:
@@ -1426,13 +1478,31 @@ async function sendNotification(chatId, lang, kind, ctx) {
   if (!chatId || !BOT_TOKEN) return { ok: false, reason: 'no chatId/token' };
   const text = pickCopy(kind, String(lang || 'en').slice(0, 2), ctx || {});
   if (!text) return { ok: false, reason: 'no copy for kind ' + kind };
+  // v0.3.46 — attribution params on the play URL so we can measure
+  // notification → open → game-played conversion in Mixpanel.
+  // Client reads window.location.search on boot and fires 'Notification
+  // Opened' + tags Session Start with open_source='notif'.
+  const playUrl = buildPlayUrl({
+    source: 'notif',
+    medium: 'telegram_bot',
+    campaign: kind,
+  });
   const replyMarkup = {
     inline_keyboard: [[
       { text: NOTIF_CTA[String(lang || 'en').slice(0, 2)] || NOTIF_CTA.en,
-        web_app: { url: buildPlayUrl() } }
+        web_app: { url: playUrl } }
     ]],
   };
   const gif = pickGif(kind);
+  // Helper: fire server-side Notification Sent event when delivery
+  // succeeds, so the Mixpanel funnel sent→opened→game-started works.
+  const fireSent = (mode) => {
+    mpTrack('Notification Sent', String(chatId), {
+      kind, mode, gif: gif || null,
+      lang: String(lang || 'en').slice(0, 2),
+      has_ctx: !!(ctx && Object.keys(ctx).length),
+    });
+  };
   // Try animation first; fall back to text-only if Telegram rejects the GIF
   // (CDN down, etc.). Caption supports the SAME Markdown as sendMessage.
   if (gif) {
@@ -1446,7 +1516,7 @@ async function sendNotification(chatId, lang, kind, ctx) {
         }),
       });
       const j = await r.json();
-      if (j && j.ok) return { ok: true, mode: 'animation', gif };
+      if (j && j.ok) { fireSent('animation'); return { ok: true, mode: 'animation', gif }; }
       // Else fall through to text
       console.warn('[notif] animation failed for kind', kind, '-', (j && j.description) || 'no desc');
     } catch (e) {
@@ -1462,6 +1532,7 @@ async function sendNotification(chatId, lang, kind, ctx) {
       }),
     });
     const j = await r.json();
+    if (j && j.ok) fireSent('text');
     return { ok: !!(j && j.ok), mode: 'text', reason: j && !j.ok && j.description };
   } catch (e) { return { ok: false, reason: e.message }; }
 }
