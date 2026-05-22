@@ -1230,33 +1230,37 @@ app.post('/api/setup-webhook', async (req, res) => {
 // To swap: replace the ID. Search Giphy at giphy.com, copy the URL, extract
 // the ID from the page URL or use the "Embed" → media URL.
 //
-// v0.3.44 — Tenor URLs from v0.3.43 turned out to be ID-guessed and Telegram
-// rejected them all (fell back to text-only). Replaced with confirmed Giphy
-// URLs. If any URL breaks, sendNotification still falls back to text + button.
-const FIRE_GIF     = 'https://media.giphy.com/media/3o7TKr3nzbh5WgCFxe/giphy.gif';
-const CELEBRATE    = 'https://media.giphy.com/media/26u4cqiYI30juCOGY/giphy.gif';
-const TROPHY       = 'https://media.giphy.com/media/lD76yTC5zxZPG/giphy.gif';
-const LIGHTNING    = 'https://media.giphy.com/media/3o7TKtnzD4oZkqzMUg/giphy.gif';
-const HEART        = 'https://media.giphy.com/media/l2QDM9Jnim1YVILXa/giphy.gif';
-const GIFT         = 'https://media.giphy.com/media/26ufdipQqU2lhNA4g/giphy.gif';
-const SPARKLE      = 'https://media.giphy.com/media/3oz8xLd9DJq2l2VFtu/giphy.gif';
-const TARGET       = 'https://media.giphy.com/media/3o7absbX4ZjGAlxn4Y/giphy.gif';
-const WAVE         = 'https://media.giphy.com/media/QwgnIaiehARp6/giphy.gif';
-const CHART        = 'https://media.giphy.com/media/3oEjI6SIIHBdRxXI40/giphy.gif';
-
+// v0.3.45 — IDs scraped from Giphy search top-results so each GIF matches
+// the notification's emotional beat (panic, hype, FOMO, celebration).
+// To swap any: go to giphy.com, search the query in the comment, click a
+// GIF, take the ID from the URL path (.../gifs/some-slug-{ID}), paste in.
+const GIFY = id => 'https://media.giphy.com/media/' + id + '/giphy.gif';
+const G = {
+  fire_panic:    GIFY('uzhLg2JeZPmgIUYYLd'),  // "house on fire panic"
+  treasure_open: GIFY('URtLkq20ArVZ49JoNI'),  // "treasure chest open"
+  challenge:     GIFY('AWv3UAFkgz39u'),        // "challenge accepted"
+  miss_you:      GIFY('OPWLlr5lQxV7c4gDRj'),  // "miss you wave"
+  charging_up:   GIFY('LdjhDhuU7bUI2UxwMx'),  // "charging up power"
+  lightning:     GIFY('3ohzgEubwQ4i4c2lwY'),  // "lightning power"
+  rushing:       GIFY('5q3NyUvgt1w9unrLJ9'),  // "running out of time"
+  trophy:        GIFY('1BfPP1taCof3s61x71'),  // "trophy celebration"
+  almost_there:  GIFY('26FeWZkCLcn4CaMRq'),   // "almost there"
+  reading_paper: GIFY('VeT5jhseHD0W3dI7de'),  // "reading newspaper"
+  one_more_day:  GIFY('GSbRkSrg1nz9K'),        // "one more day"
+};
 const NOTIF_GIFS = {
-  streak_risk:         [FIRE_GIF],
-  daily_chest:         [GIFT, SPARKLE],
-  daily_challenge:     [TARGET],
-  comeback:            [WAVE, HEART],
-  power_hour_starting: [LIGHTNING],
-  power_hour_active:   [LIGHTNING, FIRE_GIF],
-  tournament_ending:   [TROPHY, FIRE_GIF],
-  tournament_results:  [TROPHY, CELEBRATE],
-  season_step_close:   [SPARKLE],
-  weekly_recap:        [CHART],
-  milestone_close:     [TROPHY, FIRE_GIF],
-  generic:             [GIFT],
+  streak_risk:         [G.fire_panic],
+  daily_chest:         [G.treasure_open],
+  daily_challenge:     [G.challenge],
+  comeback:            [G.miss_you],
+  power_hour_starting: [G.charging_up],
+  power_hour_active:   [G.lightning],
+  tournament_ending:   [G.rushing],
+  tournament_results:  [G.trophy],
+  season_step_close:   [G.almost_there],
+  weekly_recap:        [G.reading_paper],
+  milestone_close:     [G.one_more_day],
+  generic:             [G.treasure_open],
 };
 function pickGif(kind) {
   const arr = NOTIF_GIFS[kind] || NOTIF_GIFS.generic || [];
