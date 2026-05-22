@@ -470,12 +470,44 @@ function drainPending(userId) {
   return arr;
 }
 
+// ============ User state (notifications, chatId, etc.) ============
+// v0.3.43 — persisted to disk so chatIds + notif tracking survive Render
+// redeploys. Previously this was in-memory only and every redeploy meant
+// no notifications could fire until each user reopened the app (which
+// re-fired /api/heartbeat to repopulate the map). Now we serialize to
+// data/notif-state.json on every change (debounced 5s).
 const userState = new Map();
+const USER_STATE_FILE = path.join(DATA_DIR, 'notif-state.json');
+let userStateSaveTimer = null;
+function loadUserState() {
+  try {
+    if (!fs.existsSync(USER_STATE_FILE)) return;
+    const obj = JSON.parse(fs.readFileSync(USER_STATE_FILE, 'utf8'));
+    if (obj && typeof obj === 'object') {
+      for (const k of Object.keys(obj)) userState.set(Number(k) || k, obj[k]);
+      console.log('[notif] loaded ' + userState.size + ' user state entries');
+    }
+  } catch (e) { console.error('[notif] state load failed:', e.message); }
+}
+function saveUserState() {
+  // Debounced — many calls per minute collapse into one disk write
+  if (userStateSaveTimer) return;
+  userStateSaveTimer = setTimeout(() => {
+    userStateSaveTimer = null;
+    try {
+      const obj = {};
+      for (const [k, v] of userState) obj[String(k)] = v;
+      fs.writeFileSync(USER_STATE_FILE, JSON.stringify(obj));
+    } catch (e) { console.error('[notif] state save failed:', e.message); }
+  }, 5000);
+}
 function rememberUser(userId, patch) {
   if (!userId) return;
   const prev = userState.get(userId) || {};
   userState.set(userId, Object.assign(prev, patch));
+  saveUserState();
 }
+loadUserState();
 
 function validateInitData(initData) {
   if (!initData || !BOT_TOKEN) return null;
@@ -1116,8 +1148,16 @@ async function sendWelcome(chatId, firstName, lang) {
 }
 
 app.get('/api/diag', async (req, res) => {
+  // Count users with valid chatId for notifications + recent activity
+  const now = Date.now();
+  let withChatId = 0, activeLastDay = 0, activeLastWeek = 0;
+  for (const [, st] of userState) {
+    if (st.chatId) withChatId++;
+    if (st.lastActiveAt && (now - st.lastActiveAt) < 24 * 60 * 60 * 1000) activeLastDay++;
+    if (st.lastActiveAt && (now - st.lastActiveAt) < 7 * 24 * 60 * 60 * 1000) activeLastWeek++;
+  }
   const out = {
-    version: 'v0.3.0',
+    version: 'v0.3.43',
     bot_token_configured: !!BOT_TOKEN,
     bot_username: BOT_USERNAME || null,
     public_url: getPublicUrl() || null,
@@ -1125,6 +1165,10 @@ app.get('/api/diag', async (req, res) => {
     data_dir_writable: false,
     leaderboard_entries: leaderboard.regular.length,
     user_state_count: userState.size,
+    notif_users_with_chatid: withChatId,
+    notif_active_last_day: activeLastDay,
+    notif_active_last_week: activeLastWeek,
+    notif_kinds_configured: Object.keys(NOTIF_COPY || {}).length,
     pending_purchase_users: pendingByUser.size,
     uptime_sec: Math.round(process.uptime()),
     webhook: null,
@@ -1170,51 +1214,290 @@ app.post('/api/setup-webhook', async (req, res) => {
   } catch (e) { res.status(500).json({ error: String(e && e.message || e) }); }
 });
 
-// ============ Notifications ============
+// ============ Notifications (v0.3.43 robust system) ============
+// Every notification fires through sendNotification(chatId, lang, kind, ctx)
+// which:
+//   1. picks a random copy variant (3-5 per kind, EN + RU)
+//   2. attaches a curated GIF (Tenor URL — Telegram natively renders these)
+//   3. attaches an inline "PLAY" button that opens the Mini App
+//   4. falls back to text-only sendMessage if sendAnimation fails
+//
+// Throttling: max 3/day per user, 6h between any two, 24h per kind.
+// Persisted state survives Render redeploys (notif-state.json).
+
+// Curated GIF library — Tenor URLs picked for relevance + reliability.
+// Multiple URLs per kind so each notification rolls a different GIF.
+// To swap any: replace the URL. To add more: append to the array. All URLs
+// must be HTTPS and direct .gif/.mp4 endpoints (not Tenor page URLs).
+const NOTIF_GIFS = {
+  streak_risk: [
+    'https://media.tenor.com/eaJ4VFXgJlMAAAAC/fire-flame.gif',           // fire intensifying
+    'https://media.tenor.com/4VeREJVHHMQAAAAC/burn-fire.gif',            // fire burn
+    'https://media.tenor.com/cHE6fE1bxhgAAAAC/clock-timer.gif',          // clock ticking
+  ],
+  daily_chest: [
+    'https://media.tenor.com/dnFLDfk7c4UAAAAC/treasure-chest-opening.gif',
+    'https://media.tenor.com/ynxe2D-uHzMAAAAC/loot-box.gif',
+    'https://media.tenor.com/qWQXf6Bw1RIAAAAC/gift-present.gif',
+  ],
+  daily_challenge: [
+    'https://media.tenor.com/Q-eMnDqZ7DYAAAAC/target-bullseye.gif',
+    'https://media.tenor.com/zPDDx-Q7w0wAAAAC/challenge-accepted.gif',
+    'https://media.tenor.com/sIuYMxxQrn0AAAAC/sun-rising.gif',
+  ],
+  comeback: [
+    'https://media.tenor.com/Gg9q9p-CSjcAAAAC/wave-hello.gif',
+    'https://media.tenor.com/9b39ZJ9rrx0AAAAC/miss-you.gif',
+    'https://media.tenor.com/X3ZchcMV7gwAAAAC/come-back.gif',
+  ],
+  power_hour_starting: [
+    'https://media.tenor.com/yhxnh3MAFOMAAAAC/lightning-electric.gif',
+    'https://media.tenor.com/J-3R5XQRchYAAAAC/power-up.gif',
+    'https://media.tenor.com/W9X4Hxh-EZIAAAAC/get-ready.gif',
+  ],
+  power_hour_active: [
+    'https://media.tenor.com/jX4iRpY-vbsAAAAC/lets-go-fire.gif',
+    'https://media.tenor.com/aRTQXrM3hooAAAAC/double-x2.gif',
+    'https://media.tenor.com/RH4SnUEX1VgAAAAC/lightning-strike.gif',
+  ],
+  tournament_ending: [
+    'https://media.tenor.com/MTQ0iE82c1IAAAAC/hurry-rush.gif',
+    'https://media.tenor.com/wKqGknPnGmYAAAAC/race-finish.gif',
+    'https://media.tenor.com/9CKkBxAFhocAAAAC/trophy-winner.gif',
+  ],
+  tournament_results: [
+    'https://media.tenor.com/p7sQUyHFLm0AAAAC/trophy-celebration.gif',
+    'https://media.tenor.com/T-fPnQuYJ_AAAAAC/winner-champion.gif',
+    'https://media.tenor.com/3oF8RGGiYHQAAAAC/podium.gif',
+  ],
+  season_step_close: [
+    'https://media.tenor.com/EyXuxYZJX_QAAAAC/progress-bar.gif',
+    'https://media.tenor.com/IXJj9MRTYHcAAAAC/almost-there.gif',
+    'https://media.tenor.com/ZB7-pZWnFlIAAAAC/star-sparkle.gif',
+  ],
+  weekly_recap: [
+    'https://media.tenor.com/-i-DcpzAvX0AAAAC/scroll-paper.gif',
+    'https://media.tenor.com/oRA_2RYJEBwAAAAC/chart-graph.gif',
+    'https://media.tenor.com/v0Wjpe_DCpgAAAAC/weekend-friday.gif',
+  ],
+  milestone_close: [
+    'https://media.tenor.com/CrgWxLO3rH8AAAAC/trophy-medal.gif',
+    'https://media.tenor.com/L9eb0xRTRoEAAAAC/almost-streak.gif',
+    'https://media.tenor.com/T8ZZWLg6ovkAAAAC/keep-going.gif',
+  ],
+  generic: [
+    'https://media.tenor.com/qWQXf6Bw1RIAAAAC/gift-present.gif',
+  ],
+};
+function pickGif(kind) {
+  const arr = NOTIF_GIFS[kind] || NOTIF_GIFS.generic || [];
+  if (!arr.length) return null;
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+// Copy library — EN + RU full. Each kind gets 4-5 variants so the same
+// player doesn't see the same line twice in a row. Tone: Telegram-native,
+// emoji-forward, FOMO-leaning, never spammy. Markdown bold OK.
 const NOTIF_COPY = {
   streak_risk: {
-    ru: ['🔥 Серия в опасности! Сыграй до полуночи, чтобы сохранить её.',
-         '🔥 Не теряй серию — одна игра и она в безопасности.'],
-    en: ['🔥 Streak in danger! Play before midnight to keep it.',
-         '🔥 Don\'t lose your streak — one quick game saves it.'],
+    ru: [
+      '🔥 *Серия {streak} дней под угрозой!*\nОдна быстрая игра — и она в безопасности до завтра.',
+      '🔥 *Не теряй серию в {streak} дней!*\nОсталось пару часов — заходи!',
+      '⏰ Твоя серия истекает! Сыграй сейчас, спаси {streak} дней подряд 🪆',
+      '🔥 *Серия горит!* Игра занимает 60 секунд — успеешь?',
+    ],
+    en: [
+      '🔥 *Your {streak}-day streak is on the line!*\nOne quick game saves it before midnight.',
+      '🔥 *Don\'t break your {streak}-day streak!*\nA couple hours left — drop in!',
+      '⏰ Your streak is about to die! Play now, keep {streak} days alive 🪆',
+      '🔥 *Streak burning out!* 60 seconds of play locks it in — let\'s go!',
+    ],
+  },
+  daily_chest: {
+    ru: [
+      '🎁 *Сундук готов!* Заходи и забирай ежедневный бонус.',
+      '🎁 Сегодняшний сундук открыт — до 500 💎 ждут тебя.',
+      '✨ День {day} серии входов = больший сундук. Не пропусти!',
+      '🎁 *Бесплатные гемы внутри!* Открой сундук сегодня.',
+    ],
+    en: [
+      '🎁 *Today\'s chest is ready!*\nOpen it for your daily gem drop.',
+      '🎁 Daily chest unlocked — up to 500 💎 waiting.',
+      '✨ Day {day} of your login streak = bigger chest. Don\'t miss it!',
+      '🎁 *Free gems inside!* Pop open today\'s chest.',
+    ],
   },
   daily_challenge: {
-    ru: ['🎯 Новый ежедневный челлендж ждёт. У тебя 24 часа!',
-         '🎯 Сегодняшняя матрёшка готова — попадёшь в топ?'],
-    en: ['🎯 Today\'s daily challenge is live. 24 hours on the clock!',
-         '🎯 New daily doll is up — can you crack the leaderboard?'],
+    ru: [
+      '🎯 *Новый ежедневный челлендж!*\nТа же раскладка для всех игроков. Попадёшь в топ?',
+      '🌅 Челлендж дня готов. У тебя 24 часа, чтобы поставить рекорд!',
+      '🎯 Сегодняшняя матрёшка — особая. Сыграй пока не сбросилась.',
+      '🌅 *Daily вызов* живой. Один шанс — твой ход.',
+    ],
+    en: [
+      '🎯 *Today\'s daily challenge is live!*\nSame seed for everyone. Can you top it?',
+      '🌅 New daily ready. 24 hours to set your best!',
+      '🎯 Today\'s seed is special. Play before it resets.',
+      '🌅 *Daily challenge* is up. One shot — make it count.',
+    ],
   },
   comeback: {
-    ru: ['👋 Давно не виделись! Загляни — тебя ждёт бонусный сундук.',
-         '👋 Скучаем! Бесплатные гемы внутри.'],
-    en: ['👋 Been a while! Drop in for a comeback bonus chest.',
-         '👋 We miss you! Free gems waiting inside.'],
+    ru: [
+      '👋 *Давно не виделись!*\nБонусный сундук + 100 💎 ждут тебя — заходи.',
+      '🪆 Скучаем! У нас новый сезонный пасс и крутые скины. Вернись на одну игру!',
+      '👋 Привет! Турнир этой недели открыт — заходи отомстить.',
+      '🪆 *3 дня без матрёшек?* Это слишком долго! Бонус ждёт.',
+    ],
+    en: [
+      '👋 *Been a while!*\nCome back for a bonus chest + 100 💎.',
+      '🪆 Miss you! New season pass and fresh skins live. One game?',
+      '👋 Hey! This week\'s tournament is open — come reclaim your spot.',
+      '🪆 *3 days without Matryoshka?* That\'s too long! Bonus inside.',
+    ],
+  },
+  power_hour_starting: {
+    ru: [
+      '⚡ *ПАУЭР АВЕР через 30 мин!*\nВсе награды x2 — будь готов!',
+      '⚡ В 18:00 UTC начинается Power Hour. Удвоение всех гемов!',
+      '⚡ *Час Удвоения* стартует скоро. Заряжайся.',
+    ],
+    en: [
+      '⚡ *POWER HOUR in 30 min!*\nAll rewards 2× — be ready!',
+      '⚡ Power Hour starts at 18:00 UTC. Every gem doubled!',
+      '⚡ *Double-Rewards Hour* about to start. Gear up.',
+    ],
+  },
+  power_hour_active: {
+    ru: [
+      '⚡ *POWER HOUR ЗАПУЩЕН!*\nВсе награды x2 целый час. Не теряй время!',
+      '⚡ x2 на ВСЁ. Прямо сейчас, 60 минут. Заходи!',
+      '🚀 Power Hour live! Каждая игра = двойной профит.',
+    ],
+    en: [
+      '⚡ *POWER HOUR IS LIVE!*\nAll rewards 2× for the next hour. Don\'t waste it!',
+      '⚡ 2× EVERYTHING. Right now, 60 minutes. Get in!',
+      '🚀 Power Hour live! Every game = double the gems.',
+    ],
+  },
+  tournament_ending: {
+    ru: [
+      '🏆 *Турнир закрывается через 4 часа!*\nТы на {rank} месте — есть шанс подняться!',
+      '🏆 Финал недели близко. Один рывок может изменить всё.',
+      '🏆 *4 часа до конца* турнира. Последний шанс!',
+    ],
+    en: [
+      '🏆 *Tournament ends in 4 hours!*\nYou\'re ranked #{rank} — one big game could move you up!',
+      '🏆 Week\'s final stretch. One push can change everything.',
+      '🏆 *4 hours left* in the tournament. Last chance!',
+    ],
+  },
+  tournament_results: {
+    ru: [
+      '🏆 *Турнир закрыт!* Ты на {rank} месте — забери награду в игре.',
+      '🎉 Результаты недели! Зайди — приз ждёт.',
+    ],
+    en: [
+      '🏆 *Tournament closed!* You finished #{rank} — claim your prize in-game.',
+      '🎉 Week wrapped! Open the app — your reward is waiting.',
+    ],
+  },
+  season_step_close: {
+    ru: [
+      '✨ *Почти на следующей награде сезона!*\nОсталось всего {points} очков.',
+      '✨ Следующий шаг сезонного пасса — рукой подать. Сыграй одну игру!',
+      '🪆 Близко к новой награде. Не останавливайся!',
+    ],
+    en: [
+      '✨ *Almost at your next season reward!*\nJust {points} points to go.',
+      '✨ Next season-pass step is right there. One quick game!',
+      '🪆 Close to a new reward. Don\'t stop now!',
+    ],
+  },
+  weekly_recap: {
+    ru: [
+      '📊 *Твоя неделя:* {games} игр, лучший счёт {best}.\nГотов побить?',
+      '📊 Воскресный отчёт: ты сыграл {games} раз на этой неделе. Финиш на ура?',
+    ],
+    en: [
+      '📊 *Your week:* {games} games, best score {best}.\nReady to top it?',
+      '📊 Sunday recap: {games} games this week. Cap it off with a banger?',
+    ],
+  },
+  milestone_close: {
+    ru: [
+      '🔥 *Серия {streak} дней!* Ещё 1 день до следующей награды.',
+      '🔥 Так близко! День {streak}/{milestone} — финиш завтра.',
+    ],
+    en: [
+      '🔥 *{streak}-day streak!* One more day to the next reward.',
+      '🔥 So close! Day {streak}/{milestone} — finish line tomorrow.',
+    ],
   },
 };
 const NOTIF_CTA = { ru: '🎮  И Г Р А Т Ь', en: '🎮  P L A Y   N O W' };
-function pickCopy(kind, lang) {
+
+// Picks a copy variant + does {placeholder} substitution from ctx.
+function pickCopy(kind, lang, ctx) {
   const t = NOTIF_COPY[kind] || {};
   const v = t[lang] || t.en || [];
-  return v[Math.floor(Math.random() * v.length)] || '';
+  let s = v[Math.floor(Math.random() * v.length)] || '';
+  if (ctx && typeof ctx === 'object') {
+    for (const k of Object.keys(ctx)) {
+      s = s.replace(new RegExp('\\{' + k + '\\}', 'g'), String(ctx[k]));
+    }
+  }
+  return s;
 }
-async function sendNotification(chatId, lang, kind) {
-  if (!chatId || !BOT_TOKEN) return false;
-  const text = pickCopy(kind, lang);
-  if (!text) return false;
+
+async function sendNotification(chatId, lang, kind, ctx) {
+  if (!chatId || !BOT_TOKEN) return { ok: false, reason: 'no chatId/token' };
+  const text = pickCopy(kind, String(lang || 'en').slice(0, 2), ctx || {});
+  if (!text) return { ok: false, reason: 'no copy for kind ' + kind };
   const replyMarkup = {
-    inline_keyboard: [[{ text: NOTIF_CTA[lang] || NOTIF_CTA.en, web_app: { url: buildPlayUrl() } }]],
+    inline_keyboard: [[
+      { text: NOTIF_CTA[String(lang || 'en').slice(0, 2)] || NOTIF_CTA.en,
+        web_app: { url: buildPlayUrl() } }
+    ]],
   };
+  const gif = pickGif(kind);
+  // Try animation first; fall back to text-only if Telegram rejects the GIF
+  // (CDN down, etc.). Caption supports the SAME Markdown as sendMessage.
+  if (gif) {
+    try {
+      const r = await fetch(`${TELEGRAM_API}/sendAnimation`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId, animation: gif,
+          caption: text, parse_mode: 'Markdown',
+          reply_markup: replyMarkup,
+        }),
+      });
+      const j = await r.json();
+      if (j && j.ok) return { ok: true, mode: 'animation', gif };
+      // Else fall through to text
+      console.warn('[notif] animation failed for kind', kind, '-', (j && j.description) || 'no desc');
+    } catch (e) {
+      console.warn('[notif] animation throw for kind', kind, '-', e.message);
+    }
+  }
   try {
     const r = await fetch(`${TELEGRAM_API}/sendMessage`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text, reply_markup: replyMarkup }),
+      body: JSON.stringify({
+        chat_id: chatId, text, parse_mode: 'Markdown',
+        reply_markup: replyMarkup, disable_web_page_preview: true,
+      }),
     });
-    return !!(await r.json()).ok;
-  } catch (e) { return false; }
+    const j = await r.json();
+    return { ok: !!(j && j.ok), mode: 'text', reason: j && !j.ok && j.description };
+  } catch (e) { return { ok: false, reason: e.message }; }
 }
+
 const ONE_HOUR = 60 * 60 * 1000;
 const ONE_DAY = 24 * 60 * 60 * 1000;
 const FIVE_MIN = 5 * 60 * 1000;
+const TWO_MIN = 2 * 60 * 1000;
+
 function canSendNotif(st, kind, now) {
   const lastKind = (st.notifLast || {})[kind] || 0;
   if (now - lastKind < ONE_DAY) return false;
@@ -1229,26 +1512,218 @@ function recordNotifSent(st, kind, now) {
   st.notifLast[kind] = now;
   st.notifLastAny = now;
   st.notifTimes = (st.notifTimes || []).concat(now);
+  saveUserState();
 }
+
+// Time-window helpers for power-hour and weekly triggers (UTC-anchored).
+function utcNow() { return new Date(); }
+function isPowerHourPreroll(d) {
+  // 17:30-17:35 UTC (30 min before 18:00 power hour starts).
+  return d.getUTCHours() === 17 && d.getUTCMinutes() >= 30 && d.getUTCMinutes() < 35;
+}
+function isPowerHourStart(d) {
+  // 18:00-18:05 UTC (during the first 5 min of power hour).
+  return d.getUTCHours() === 18 && d.getUTCMinutes() < 5;
+}
+function isWeeklyRecapWindow(d) {
+  // Sunday 18:00-18:05 UTC (so it gets a single fire weekly, aligned w/ TG peak time).
+  return d.getUTCDay() === 0 && d.getUTCHours() === 18 && d.getUTCMinutes() < 5;
+}
+function isTournamentClosingWindow(d) {
+  // Sunday 19:00-19:05 UTC — 4 hours before Monday 00:00 UTC weekly close.
+  // (Adjust if your tournament uses a different close time.)
+  return d.getUTCDay() === 0 && d.getUTCHours() === 19 && d.getUTCMinutes() < 5;
+}
+
 async function notifyLoop() {
   const now = Date.now();
+  const d = utcNow();
+  const inPHPreroll = isPowerHourPreroll(d);
+  const inPHStart = isPowerHourStart(d);
+  const inWeeklyRecap = isWeeklyRecapWindow(d);
+  const inTournClosing = isTournamentClosingWindow(d);
+
+  let sent = 0;
   for (const [uid, st] of userState) {
     if (!st.chatId) continue;
-    if (st.streak > 0 && st.streakRiskAt && st.streakRiskAt > now && (st.streakRiskAt - now) < 4 * ONE_HOUR
+    if (sent >= 30) break;   // safety cap per tick — Telegram rate limit ~30/sec
+    const lang = String(st.lang || 'en').slice(0, 2);
+
+    // --- Time-window triggers (highest priority, fire across all users) ---
+    if (inPHPreroll && canSendNotif(st, 'power_hour_starting', now)) {
+      const r = await sendNotification(st.chatId, lang, 'power_hour_starting');
+      if (r.ok) { recordNotifSent(st, 'power_hour_starting', now); sent++; }
+      continue;
+    }
+    if (inPHStart && canSendNotif(st, 'power_hour_active', now)) {
+      const r = await sendNotification(st.chatId, lang, 'power_hour_active');
+      if (r.ok) { recordNotifSent(st, 'power_hour_active', now); sent++; }
+      continue;
+    }
+    if (inWeeklyRecap && canSendNotif(st, 'weekly_recap', now)) {
+      const ctx = { games: st.totalGamesEver || 0, best: st.best || 0 };
+      const r = await sendNotification(st.chatId, lang, 'weekly_recap', ctx);
+      if (r.ok) { recordNotifSent(st, 'weekly_recap', now); sent++; }
+      continue;
+    }
+    if (inTournClosing && st.tournamentRank && st.tournamentRank <= 50
+        && canSendNotif(st, 'tournament_ending', now)) {
+      const r = await sendNotification(st.chatId, lang, 'tournament_ending',
+        { rank: st.tournamentRank });
+      if (r.ok) { recordNotifSent(st, 'tournament_ending', now); sent++; }
+      continue;
+    }
+
+    // --- Streak risk: streak > 0, expires within 4h, idle 30+ min ---
+    if (st.streak > 0 && st.streakRiskAt && st.streakRiskAt > now
+        && (st.streakRiskAt - now) < 4 * ONE_HOUR
         && (now - (st.lastActiveAt || 0)) > 30 * 60 * 1000
         && canSendNotif(st, 'streak_risk', now)) {
-      if (await sendNotification(st.chatId, st.lang || 'en', 'streak_risk')) recordNotifSent(st, 'streak_risk', now);
+      const r = await sendNotification(st.chatId, lang, 'streak_risk',
+        { streak: st.streak });
+      if (r.ok) { recordNotifSent(st, 'streak_risk', now); sent++; }
       continue;
     }
-    if (st.lastActiveAt && (now - st.lastActiveAt) > 3 * ONE_DAY && canSendNotif(st, 'comeback', now)) {
-      if (await sendNotification(st.chatId, st.lang || 'en', 'comeback')) recordNotifSent(st, 'comeback', now);
+
+    // --- Milestone close: 1 day away from 7/14/30/100-day milestone ---
+    const milestones = [7, 14, 30, 100];
+    const nextMs = milestones.find(m => st.streak === m - 1);
+    if (nextMs && (now - (st.lastActiveAt || 0)) > 20 * ONE_HOUR
+        && canSendNotif(st, 'milestone_close', now)) {
+      const r = await sendNotification(st.chatId, lang, 'milestone_close',
+        { streak: st.streak, milestone: nextMs });
+      if (r.ok) { recordNotifSent(st, 'milestone_close', now); sent++; }
       continue;
     }
-    if (st.lastActiveAt && (now - st.lastActiveAt) > 18 * ONE_HOUR && canSendNotif(st, 'daily_challenge', now)) {
-      if (await sendNotification(st.chatId, st.lang || 'en', 'daily_challenge')) recordNotifSent(st, 'daily_challenge', now);
+
+    // --- Season step close: within 5k of next step ---
+    if (st.seasonPointsToNext && st.seasonPointsToNext > 0 && st.seasonPointsToNext < 5000
+        && (now - (st.lastActiveAt || 0)) > 12 * ONE_HOUR
+        && canSendNotif(st, 'season_step_close', now)) {
+      const r = await sendNotification(st.chatId, lang, 'season_step_close',
+        { points: st.seasonPointsToNext });
+      if (r.ok) { recordNotifSent(st, 'season_step_close', now); sent++; }
+      continue;
+    }
+
+    // --- Comeback: idle 3+ days ---
+    if (st.lastActiveAt && (now - st.lastActiveAt) > 3 * ONE_DAY
+        && canSendNotif(st, 'comeback', now)) {
+      const r = await sendNotification(st.chatId, lang, 'comeback');
+      if (r.ok) { recordNotifSent(st, 'comeback', now); sent++; }
+      continue;
+    }
+
+    // --- Daily chest ready: idle 16+ hours, last chest claimed yesterday ---
+    if (st.lastActiveAt && (now - st.lastActiveAt) > 16 * ONE_HOUR
+        && canSendNotif(st, 'daily_chest', now)) {
+      const r = await sendNotification(st.chatId, lang, 'daily_chest',
+        { day: (st.chestDay || 1) });
+      if (r.ok) { recordNotifSent(st, 'daily_chest', now); sent++; }
+      continue;
+    }
+
+    // --- Daily challenge nudge: idle 18+ hours ---
+    if (st.lastActiveAt && (now - st.lastActiveAt) > 18 * ONE_HOUR
+        && canSendNotif(st, 'daily_challenge', now)) {
+      const r = await sendNotification(st.chatId, lang, 'daily_challenge');
+      if (r.ok) { recordNotifSent(st, 'daily_challenge', now); sent++; }
     }
   }
+  if (sent > 0) console.log('[notify] sent ' + sent + ' in this tick');
 }
+
+// ============ Admin notification endpoints ============
+// Admin-only: /api/admin/notify-test fires a test notification to the caller
+// IMMEDIATELY, bypassing throttling. Use to verify the system works end-to-end
+// without waiting for a trigger window. Example:
+//   POST /api/admin/notify-test { initData, kind: "streak_risk" }
+app.post('/api/admin/notify-test', async (req, res) => {
+  const { initData, kind, ctx } = req.body || {};
+  const user = validateInitData(initData || '');
+  if (!user) return res.status(401).json({ error: 'invalid initData' });
+  if (!isAdmin(user.id)) return res.status(403).json({ error: 'admin only' });
+  const st = userState.get(user.id) || {};
+  const chatId = st.chatId || user.id;
+  const lang = st.lang || (user.language_code || 'en').slice(0, 2);
+  if (!NOTIF_COPY[kind]) {
+    return res.status(400).json({
+      error: 'unknown kind',
+      available: Object.keys(NOTIF_COPY),
+    });
+  }
+  const result = await sendNotification(chatId, lang, kind, ctx || {
+    streak: 7, day: 3, rank: 5, points: 2400, games: 42, best: 12500, milestone: 14
+  });
+  res.json({ ok: result.ok, result, chatId, lang, kind });
+});
+
+// Curl-friendly variant: auth by BOT_TOKEN (same pattern as /api/setup-webhook).
+// Pickle can fire this from his laptop without opening the Mini App.
+// Example:
+//   curl -X POST https://matryoshka-zlp6.onrender.com/api/admin/notify-fire \
+//     -H "x-setup-key: $BOT_TOKEN" \
+//     -H "Content-Type: application/json" \
+//     -d '{"telegram_user_id":23040617,"kind":"streak_risk"}'
+app.post('/api/admin/notify-fire', async (req, res) => {
+  if (!BOT_TOKEN) return res.status(500).json({ error: 'BOT_TOKEN not set' });
+  if (req.headers['x-setup-key'] !== BOT_TOKEN) {
+    return res.status(403).json({ error: 'wrong setup key' });
+  }
+  const { telegram_user_id, kind, ctx, lang } = req.body || {};
+  if (!telegram_user_id || !kind) {
+    return res.status(400).json({ error: 'need telegram_user_id + kind',
+      available_kinds: Object.keys(NOTIF_COPY) });
+  }
+  const st = userState.get(Number(telegram_user_id)) || {};
+  const chatId = st.chatId || Number(telegram_user_id);   // default: DM to user
+  const useLang = lang || st.lang || 'en';
+  const result = await sendNotification(chatId, useLang, kind, ctx || {
+    streak: 7, day: 3, rank: 5, points: 2400, games: 42, best: 12500, milestone: 14
+  });
+  res.json({ ok: result.ok, result, chatId, lang: useLang, kind });
+});
+
+// Admin-only: snapshot of notification state — who's eligible, last fires,
+// per-kind counts. Useful for debugging "why didn't I get a notification?"
+app.post('/api/admin/notify-status', (req, res) => {
+  const { initData, only_me } = req.body || {};
+  const user = validateInitData(initData || '');
+  if (!user) return res.status(401).json({ error: 'invalid initData' });
+  if (!isAdmin(user.id)) return res.status(403).json({ error: 'admin only' });
+  const now = Date.now();
+  const summary = {
+    bot_token_configured: !!BOT_TOKEN,
+    user_state_count: userState.size,
+    notif_kinds: Object.keys(NOTIF_COPY),
+    gif_kinds: Object.keys(NOTIF_GIFS),
+    now_utc: new Date().toISOString(),
+    next_windows: {
+      power_hour_preroll_utc: '17:30',
+      power_hour_start_utc:   '18:00',
+      weekly_recap_utc:       'Sun 18:00',
+      tournament_closing_utc: 'Sun 19:00',
+    },
+    users: [],
+  };
+  for (const [uid, st] of userState) {
+    if (only_me && Number(uid) !== Number(user.id)) continue;
+    const lastAny = st.notifLastAny || 0;
+    const idle = st.lastActiveAt ? Math.round((now - st.lastActiveAt) / 1000) : null;
+    summary.users.push({
+      uid, chatId: st.chatId, lang: st.lang,
+      streak: st.streak || 0,
+      idle_sec: idle,
+      total_notifs_24h: (st.notifTimes || []).filter(t => now - t < ONE_DAY).length,
+      sec_since_last_notif: lastAny ? Math.round((now - lastAny) / 1000) : null,
+      last_by_kind: st.notifLast || {},
+    });
+  }
+  summary.users.sort((a, b) => (b.idle_sec || 0) - (a.idle_sec || 0));
+  if (only_me) summary.users = summary.users.slice(0, 1);
+  else summary.users = summary.users.slice(0, 25);
+  res.json(summary);
+});
 
 // ============ Boot ============
 app.listen(PORT, () => {
@@ -1257,8 +1732,13 @@ app.listen(PORT, () => {
   console.log(`[tournament] current: ${tournament ? tournament.id : 'none'}`);
   if (BOT_TOKEN) {
     fetchBotIdentity();
-    setInterval(notifyLoop, FIVE_MIN);
-    console.log('[notify] loop armed — every 5 min');
+    // v0.3.43 — tightened from 5 min → 2 min so time-window triggers
+    // (power_hour_starting at 17:30 UTC, weekly_recap at Sun 18:00 UTC)
+    // are guaranteed to fire inside their 5-min window even if a tick
+    // gets delayed by a slow Telegram API response.
+    setInterval(notifyLoop, TWO_MIN);
+    console.log('[notify] loop armed — every 2 min');
+    console.log('[notify] kinds:', Object.keys(NOTIF_COPY).join(', '));
   }
   // Hourly: roll over tournaments even without submissions, GC ephemeral state.
   setInterval(ensureTournament, 60 * 60 * 1000);
