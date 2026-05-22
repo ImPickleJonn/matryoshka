@@ -1300,9 +1300,10 @@ const G = {
   reading_paper: GIFY('VeT5jhseHD0W3dI7de'),  // "reading newspaper"
   one_more_day:  GIFY('GSbRkSrg1nz9K'),        // "one more day"
   // v0.3.47 — broadcast-friendly "beat your high score" kind
-  beat_record:   GIFY('3ov9jQhrS7sa5lt7j2'),  // "beat my record"
-  high_score:    GIFY('Ni4Cqn5S13xHq'),        // "high score"
-  you_can:       GIFY('yoJC2K6rCzwNY2EngA'),  // "you can do it"
+  // v0.3.48 — swapped to funnier taunting/meme GIFs (Pickle wanted humor)
+  come_at_me:    GIFY('VCEHgr7btF2cbLXKTz'),  // "come at me bro"
+  bring_it_on:  GIFY('jgelsNvS6tYFG'),         // "bring it on"
+  i_dare_you:   GIFY('Mc82AYNsjgxHMpPMWE'),    // "i dare you"
 };
 const NOTIF_GIFS = {
   streak_risk:         [G.fire_panic],
@@ -1316,7 +1317,7 @@ const NOTIF_GIFS = {
   season_step_close:   [G.almost_there],
   weekly_recap:        [G.reading_paper],
   milestone_close:     [G.one_more_day],
-  beat_your_score:     [G.beat_record, G.high_score, G.you_can],
+  beat_your_score:     [G.come_at_me, G.bring_it_on, G.i_dare_you],
   generic:             [G.treasure_open],
 };
 function pickGif(kind) {
@@ -1468,27 +1469,21 @@ const NOTIF_COPY = {
   // not made up. If best is 0 (new player who never finished a game),
   // we route to the *_new_player variants which don't reference a score.
   beat_your_score: {
+    // v0.3.48 — single internationally-clear line per lang.
+    // No idioms, no compound sentences. Score on its own visual line.
     ru: [
-      '🏆 *Твой рекорд: {score}* — слабо побить?',
-      '🏆 *Твой лучший счёт — {score}.*\nГотов превзойти себя сегодня?',
-      '🪆 Ты держишь {score}. Один заход — и можешь быть на новой вершине!',
-      '🔥 *Рекорд {score}* ждёт, чтобы его сломали. Дерзай!',
+      '🏆 *Твой рекорд: {score}*\nСможешь побить?!',
     ],
     en: [
-      '🏆 *Your high score: {score}* — think you can beat it?',
-      '🏆 *Your personal best is {score}.*\nReady to top yourself today?',
-      '🪆 You\'re sitting at {score}. One run could put you on a new peak!',
-      '🔥 *Record {score}* is waiting to fall. Take a shot!',
+      '🏆 *Your high score: {score}*\nCan you beat it!?',
     ],
   },
   beat_your_score_new_player: {
     ru: [
-      '🪆 Ещё не поставил рекорд? Самое время!\nЗаходи и покажи, на что способен.',
-      '🏆 Готов сделать первый рекорд? Один заход — и счёт твой.',
+      '🏆 *Готов поставить свой первый рекорд?*',
     ],
     en: [
-      '🪆 No high score yet? Time to fix that!\nDrop in and show us what you\'ve got.',
-      '🏆 Ready to set your first record? One run is all it takes.',
+      '🏆 *Ready to set your first high score?*',
     ],
   },
 };
