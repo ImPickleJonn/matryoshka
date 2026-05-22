@@ -1299,6 +1299,10 @@ const G = {
   almost_there:  GIFY('26FeWZkCLcn4CaMRq'),   // "almost there"
   reading_paper: GIFY('VeT5jhseHD0W3dI7de'),  // "reading newspaper"
   one_more_day:  GIFY('GSbRkSrg1nz9K'),        // "one more day"
+  // v0.3.47 — broadcast-friendly "beat your high score" kind
+  beat_record:   GIFY('3ov9jQhrS7sa5lt7j2'),  // "beat my record"
+  high_score:    GIFY('Ni4Cqn5S13xHq'),        // "high score"
+  you_can:       GIFY('yoJC2K6rCzwNY2EngA'),  // "you can do it"
 };
 const NOTIF_GIFS = {
   streak_risk:         [G.fire_panic],
@@ -1312,6 +1316,7 @@ const NOTIF_GIFS = {
   season_step_close:   [G.almost_there],
   weekly_recap:        [G.reading_paper],
   milestone_close:     [G.one_more_day],
+  beat_your_score:     [G.beat_record, G.high_score, G.you_can],
   generic:             [G.treasure_open],
 };
 function pickGif(kind) {
@@ -1456,6 +1461,34 @@ const NOTIF_COPY = {
     en: [
       '🔥 *{streak}-day streak!* One more day to the next reward.',
       '🔥 So close! Day {streak}/{milestone} — finish line tomorrow.',
+    ],
+  },
+  // v0.3.47 — broadcast-friendly. Pulls user's actual `best` from the
+  // server-side users.json mirror at send time so the score is real,
+  // not made up. If best is 0 (new player who never finished a game),
+  // we route to the *_new_player variants which don't reference a score.
+  beat_your_score: {
+    ru: [
+      '🏆 *Твой рекорд: {score}* — слабо побить?',
+      '🏆 *Твой лучший счёт — {score}.*\nГотов превзойти себя сегодня?',
+      '🪆 Ты держишь {score}. Один заход — и можешь быть на новой вершине!',
+      '🔥 *Рекорд {score}* ждёт, чтобы его сломали. Дерзай!',
+    ],
+    en: [
+      '🏆 *Your high score: {score}* — think you can beat it?',
+      '🏆 *Your personal best is {score}.*\nReady to top yourself today?',
+      '🪆 You\'re sitting at {score}. One run could put you on a new peak!',
+      '🔥 *Record {score}* is waiting to fall. Take a shot!',
+    ],
+  },
+  beat_your_score_new_player: {
+    ru: [
+      '🪆 Ещё не поставил рекорд? Самое время!\nЗаходи и покажи, на что способен.',
+      '🏆 Готов сделать первый рекорд? Один заход — и счёт твой.',
+    ],
+    en: [
+      '🪆 No high score yet? Time to fix that!\nDrop in and show us what you\'ve got.',
+      '🏆 Ready to set your first record? One run is all it takes.',
     ],
   },
 };
@@ -1709,6 +1742,37 @@ app.post('/api/admin/notify-test', async (req, res) => {
 //     -H "x-setup-key: $BOT_TOKEN" \
 //     -H "Content-Type: application/json" \
 //     -d '{"telegram_user_id":23040617,"kind":"streak_risk"}'
+// v0.3.47 — buildCtxForUser pulls REAL per-user data (best score, streak,
+// tournament rank, etc.) from users.json + userState so personalized
+// notifications use accurate numbers. Falls back to provided ctx values
+// for anything not in the user data.
+function buildCtxForUser(telegramUserId, overrideCtx) {
+  const uid = Number(telegramUserId);
+  const stored = users[String(uid)] || users[uid] || {};
+  const live = userState.get(uid) || userState.get(String(uid)) || {};
+  return Object.assign({
+    streak: stored.streak || live.streak || 0,
+    day: stored.chestDay || 1,
+    rank: live.tournamentRank || null,
+    points: live.seasonPointsToNext || 0,
+    games: stored.totalGamesEver || 0,
+    best: stored.best || 0,
+    score: stored.best || 0,        // alias — copy uses {score} for clarity
+    milestone: 14,
+  }, overrideCtx || {});
+}
+
+// resolveKindForUser swaps to new-player variant when the score is 0,
+// otherwise returns the kind as-is. Currently only matters for
+// beat_your_score; extend the table to add similar fallbacks for other
+// score-dependent kinds in the future.
+function resolveKindForUser(kind, ctx) {
+  if (kind === 'beat_your_score' && (!ctx.score || ctx.score === 0)) {
+    return 'beat_your_score_new_player';
+  }
+  return kind;
+}
+
 app.post('/api/admin/notify-fire', async (req, res) => {
   if (!BOT_TOKEN) return res.status(500).json({ error: 'BOT_TOKEN not set' });
   if (req.headers['x-setup-key'] !== BOT_TOKEN) {
@@ -1720,12 +1784,88 @@ app.post('/api/admin/notify-fire', async (req, res) => {
       available_kinds: Object.keys(NOTIF_COPY) });
   }
   const st = userState.get(Number(telegram_user_id)) || {};
-  const chatId = st.chatId || Number(telegram_user_id);   // default: DM to user
+  const chatId = st.chatId || Number(telegram_user_id);
   const useLang = lang || st.lang || 'en';
-  const result = await sendNotification(chatId, useLang, kind, ctx || {
-    streak: 7, day: 3, rank: 5, points: 2400, games: 42, best: 12500, milestone: 14
+  const resolvedCtx = buildCtxForUser(telegram_user_id, ctx);
+  const resolvedKind = resolveKindForUser(kind, resolvedCtx);
+  const result = await sendNotification(chatId, useLang, resolvedKind, resolvedCtx);
+  res.json({
+    ok: result.ok, result, chatId,
+    lang: useLang, kind, resolved_kind: resolvedKind,
+    used_ctx: resolvedCtx,
   });
-  res.json({ ok: result.ok, result, chatId, lang: useLang, kind });
+});
+
+// v0.3.47 — broadcast endpoint. Fires the same notification kind to ALL
+// users with a known chatId, paced to stay under Telegram's 30 msg/sec
+// global limit. Per-user ctx is auto-populated (so each user sees their
+// own high score, streak, etc.). Throttling per kind/user is BYPASSED
+// since this is explicit admin intent.
+//
+// Example dry-run (no actual sends, just audience count):
+//   curl -X POST https://.../api/admin/notify-broadcast \
+//     -H "x-setup-key: $BOT_TOKEN" -H "Content-Type: application/json" \
+//     -d '{"kind":"beat_your_score","dry_run":true}'
+//
+// Real broadcast:
+//   curl ... -d '{"kind":"beat_your_score","dry_run":false}'
+//
+// Limit to N test recipients (random sample):
+//   curl ... -d '{"kind":"beat_your_score","dry_run":false,"limit":10}'
+app.post('/api/admin/notify-broadcast', async (req, res) => {
+  if (!BOT_TOKEN) return res.status(500).json({ error: 'BOT_TOKEN not set' });
+  if (req.headers['x-setup-key'] !== BOT_TOKEN) {
+    return res.status(403).json({ error: 'wrong setup key' });
+  }
+  const { kind, ctx, dry_run, limit, only_user_ids } = req.body || {};
+  if (!kind || !NOTIF_COPY[kind]) {
+    return res.status(400).json({ error: 'unknown kind',
+      available: Object.keys(NOTIF_COPY) });
+  }
+  // Build audience: every user in userState that has a chatId.
+  let audience = [];
+  for (const [uid, st] of userState) {
+    if (!st.chatId) continue;
+    audience.push({ uid, chatId: st.chatId, lang: st.lang || 'en' });
+  }
+  if (Array.isArray(only_user_ids) && only_user_ids.length) {
+    const set = new Set(only_user_ids.map(String));
+    audience = audience.filter(a => set.has(String(a.uid)));
+  }
+  if (typeof limit === 'number' && limit > 0) {
+    // Shuffle then take N — random sample for test cohorts
+    for (let i = audience.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [audience[i], audience[j]] = [audience[j], audience[i]];
+    }
+    audience = audience.slice(0, limit);
+  }
+  if (dry_run) {
+    // Preview ctx for a few users so admin can sanity-check copy
+    const preview = audience.slice(0, 5).map(a => ({
+      uid: a.uid, chatId: a.chatId, lang: a.lang,
+      ctx: buildCtxForUser(a.uid, ctx),
+      resolved_kind: resolveKindForUser(kind, buildCtxForUser(a.uid, ctx)),
+    }));
+    return res.json({ ok: true, dry_run: true, would_send_to: audience.length, sample_preview: preview });
+  }
+  // Pace at ~20 sends/sec (50ms gap) — comfortably under Telegram's
+  // 30/sec global rate limit. For huge bases (>10k) this still finishes
+  // in a few minutes and won't trip any 429s.
+  let sent = 0, failed = 0;
+  // Fire-and-forget at the HTTP level — return audience count immediately,
+  // let the broadcast continue in the background.
+  res.json({ ok: true, broadcast_started: true, audience: audience.length, kind });
+  (async () => {
+    for (const a of audience) {
+      const resolvedCtx = buildCtxForUser(a.uid, ctx);
+      const resolvedKind = resolveKindForUser(kind, resolvedCtx);
+      const result = await sendNotification(a.chatId, a.lang, resolvedKind, resolvedCtx);
+      if (result.ok) sent++; else failed++;
+      await new Promise(r => setTimeout(r, 50));   // ~20/sec pace
+    }
+    console.log('[broadcast] kind=' + kind + ' sent=' + sent + ' failed=' + failed + ' total=' + audience.length);
+  })().catch(e => console.error('[broadcast] error:', e.message));
 });
 
 // Admin-only: snapshot of notification state — who's eligible, last fires,
