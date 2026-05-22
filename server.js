@@ -1225,69 +1225,38 @@ app.post('/api/setup-webhook', async (req, res) => {
 // Throttling: max 3/day per user, 6h between any two, 24h per kind.
 // Persisted state survives Render redeploys (notif-state.json).
 
-// Curated GIF library — Tenor URLs picked for relevance + reliability.
-// Multiple URLs per kind so each notification rolls a different GIF.
-// To swap any: replace the URL. To add more: append to the array. All URLs
-// must be HTTPS and direct .gif/.mp4 endpoints (not Tenor page URLs).
+// GIF library — Giphy media URLs (more stable than Tenor for direct embed
+// via Bot API). Format: https://media.giphy.com/media/{ID}/giphy.gif
+// To swap: replace the ID. Search Giphy at giphy.com, copy the URL, extract
+// the ID from the page URL or use the "Embed" → media URL.
+//
+// v0.3.44 — Tenor URLs from v0.3.43 turned out to be ID-guessed and Telegram
+// rejected them all (fell back to text-only). Replaced with confirmed Giphy
+// URLs. If any URL breaks, sendNotification still falls back to text + button.
+const FIRE_GIF     = 'https://media.giphy.com/media/3o7TKr3nzbh5WgCFxe/giphy.gif';
+const CELEBRATE    = 'https://media.giphy.com/media/26u4cqiYI30juCOGY/giphy.gif';
+const TROPHY       = 'https://media.giphy.com/media/lD76yTC5zxZPG/giphy.gif';
+const LIGHTNING    = 'https://media.giphy.com/media/3o7TKtnzD4oZkqzMUg/giphy.gif';
+const HEART        = 'https://media.giphy.com/media/l2QDM9Jnim1YVILXa/giphy.gif';
+const GIFT         = 'https://media.giphy.com/media/26ufdipQqU2lhNA4g/giphy.gif';
+const SPARKLE      = 'https://media.giphy.com/media/3oz8xLd9DJq2l2VFtu/giphy.gif';
+const TARGET       = 'https://media.giphy.com/media/3o7absbX4ZjGAlxn4Y/giphy.gif';
+const WAVE         = 'https://media.giphy.com/media/QwgnIaiehARp6/giphy.gif';
+const CHART        = 'https://media.giphy.com/media/3oEjI6SIIHBdRxXI40/giphy.gif';
+
 const NOTIF_GIFS = {
-  streak_risk: [
-    'https://media.tenor.com/eaJ4VFXgJlMAAAAC/fire-flame.gif',           // fire intensifying
-    'https://media.tenor.com/4VeREJVHHMQAAAAC/burn-fire.gif',            // fire burn
-    'https://media.tenor.com/cHE6fE1bxhgAAAAC/clock-timer.gif',          // clock ticking
-  ],
-  daily_chest: [
-    'https://media.tenor.com/dnFLDfk7c4UAAAAC/treasure-chest-opening.gif',
-    'https://media.tenor.com/ynxe2D-uHzMAAAAC/loot-box.gif',
-    'https://media.tenor.com/qWQXf6Bw1RIAAAAC/gift-present.gif',
-  ],
-  daily_challenge: [
-    'https://media.tenor.com/Q-eMnDqZ7DYAAAAC/target-bullseye.gif',
-    'https://media.tenor.com/zPDDx-Q7w0wAAAAC/challenge-accepted.gif',
-    'https://media.tenor.com/sIuYMxxQrn0AAAAC/sun-rising.gif',
-  ],
-  comeback: [
-    'https://media.tenor.com/Gg9q9p-CSjcAAAAC/wave-hello.gif',
-    'https://media.tenor.com/9b39ZJ9rrx0AAAAC/miss-you.gif',
-    'https://media.tenor.com/X3ZchcMV7gwAAAAC/come-back.gif',
-  ],
-  power_hour_starting: [
-    'https://media.tenor.com/yhxnh3MAFOMAAAAC/lightning-electric.gif',
-    'https://media.tenor.com/J-3R5XQRchYAAAAC/power-up.gif',
-    'https://media.tenor.com/W9X4Hxh-EZIAAAAC/get-ready.gif',
-  ],
-  power_hour_active: [
-    'https://media.tenor.com/jX4iRpY-vbsAAAAC/lets-go-fire.gif',
-    'https://media.tenor.com/aRTQXrM3hooAAAAC/double-x2.gif',
-    'https://media.tenor.com/RH4SnUEX1VgAAAAC/lightning-strike.gif',
-  ],
-  tournament_ending: [
-    'https://media.tenor.com/MTQ0iE82c1IAAAAC/hurry-rush.gif',
-    'https://media.tenor.com/wKqGknPnGmYAAAAC/race-finish.gif',
-    'https://media.tenor.com/9CKkBxAFhocAAAAC/trophy-winner.gif',
-  ],
-  tournament_results: [
-    'https://media.tenor.com/p7sQUyHFLm0AAAAC/trophy-celebration.gif',
-    'https://media.tenor.com/T-fPnQuYJ_AAAAAC/winner-champion.gif',
-    'https://media.tenor.com/3oF8RGGiYHQAAAAC/podium.gif',
-  ],
-  season_step_close: [
-    'https://media.tenor.com/EyXuxYZJX_QAAAAC/progress-bar.gif',
-    'https://media.tenor.com/IXJj9MRTYHcAAAAC/almost-there.gif',
-    'https://media.tenor.com/ZB7-pZWnFlIAAAAC/star-sparkle.gif',
-  ],
-  weekly_recap: [
-    'https://media.tenor.com/-i-DcpzAvX0AAAAC/scroll-paper.gif',
-    'https://media.tenor.com/oRA_2RYJEBwAAAAC/chart-graph.gif',
-    'https://media.tenor.com/v0Wjpe_DCpgAAAAC/weekend-friday.gif',
-  ],
-  milestone_close: [
-    'https://media.tenor.com/CrgWxLO3rH8AAAAC/trophy-medal.gif',
-    'https://media.tenor.com/L9eb0xRTRoEAAAAC/almost-streak.gif',
-    'https://media.tenor.com/T8ZZWLg6ovkAAAAC/keep-going.gif',
-  ],
-  generic: [
-    'https://media.tenor.com/qWQXf6Bw1RIAAAAC/gift-present.gif',
-  ],
+  streak_risk:         [FIRE_GIF],
+  daily_chest:         [GIFT, SPARKLE],
+  daily_challenge:     [TARGET],
+  comeback:            [WAVE, HEART],
+  power_hour_starting: [LIGHTNING],
+  power_hour_active:   [LIGHTNING, FIRE_GIF],
+  tournament_ending:   [TROPHY, FIRE_GIF],
+  tournament_results:  [TROPHY, CELEBRATE],
+  season_step_close:   [SPARKLE],
+  weekly_recap:        [CHART],
+  milestone_close:     [TROPHY, FIRE_GIF],
+  generic:             [GIFT],
 };
 function pickGif(kind) {
   const arr = NOTIF_GIFS[kind] || NOTIF_GIFS.generic || [];
