@@ -1629,7 +1629,7 @@
    ========================================================= */
 'use strict';
 
-const MX_VERSION = 'v0.3.46';
+const MX_VERSION = 'v0.3.54';
 const MX = {
   token: '',
   distinctId: null,
@@ -6601,6 +6601,43 @@ function openFtueIfFirst() {
       open_source: ATTRIB.source,
       open_campaign: ATTRIB.campaign,
       open_medium: ATTRIB.medium,
+    });
+    // v0.3.54 — dedicated 'App Opened' event for retention analysis.
+    // Why a new event when 'Session Start' already exists?
+    // Mixpanel retention reports using "Any Event" inflate the cohort
+    // with server-side events like 'Notification Sent' that don't
+    // represent actual user activity. 'App Opened' is guaranteed to
+    // fire ONLY from the client, ONLY on a real Mini App open or a
+    // restore-from-background (>5 min gap), making it the canonical
+    // signal for retention curves. Born = first ever App Opened,
+    // Return = subsequent App Opened on later days.
+    //
+    // type: 'initial'  — fresh boot of the Mini App (this branch)
+    // type: 'restored' — visibility returned to visible after 5+ min away
+    window.__lastAppOpenAt = Date.now();
+    MX.track('App Opened', {
+      type: 'initial',
+      streak: state.streak || 0,
+      total_games_ever: state.totalGamesEver || 0,
+      best: state.best || 0,
+      ftue_done: !!state.ftueDone,
+      open_source: ATTRIB.source,
+      open_campaign: ATTRIB.campaign,
+    });
+    // Hook visibilitychange to fire 'restored' opens. 5-min throttle
+    // means quick tab-switches don't spam the event.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') return;
+      const now = Date.now();
+      if (now - (window.__lastAppOpenAt || 0) < 5 * 60 * 1000) return;
+      window.__lastAppOpenAt = now;
+      MX.track('App Opened', {
+        type: 'restored',
+        streak: state.streak || 0,
+        total_games_ever: state.totalGamesEver || 0,
+        best: state.best || 0,
+        ftue_done: !!state.ftueDone,
+      });
     });
     // Dedicated 'Notification Opened' event so the Mixpanel funnel
     //   Notification Sent (server) → Notification Opened (client) → Game Started
