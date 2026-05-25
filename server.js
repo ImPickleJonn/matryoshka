@@ -1986,6 +1986,134 @@ app.post('/api/admin/notify-status', (req, res) => {
   res.json(summary);
 });
 
+// ============ Channel auto-posts (v0.3.53) ============
+// Scheduled posts to the @MatryoshkaMerge news channel. Different from
+// the DM notification system — these are BROADCAST to the whole channel
+// (everyone who subscribed, not personalized per user).
+//
+// Three slots fire on UTC clock:
+//   - daily_challenge        at 00:05 UTC daily
+//   - power_hour_live        at 18:00 UTC daily
+//   - tournament_closing     at Sun 19:00 UTC weekly
+//
+// Each post includes a tappable PLAY NOW button (URL deep link, opens
+// Mini App). Dedupe by UTC day + slot name so a 2-min poll never
+// double-fires within a 5-min window. Persisted to disk so Render
+// redeploys mid-window don't cause double-posts either.
+const CHANNEL_USERNAME = process.env.CHANNEL_USERNAME || '@MatryoshkaMerge';
+const CHANNEL_POSTS_FILE = path.join(DATA_DIR, 'channel-posts.json');
+let channelPostsToday = { ymd: '', slots: [] };
+function loadChannelPosts() {
+  try {
+    if (!fs.existsSync(CHANNEL_POSTS_FILE)) return;
+    const obj = JSON.parse(fs.readFileSync(CHANNEL_POSTS_FILE, 'utf8'));
+    if (obj && obj.ymd && Array.isArray(obj.slots)) channelPostsToday = obj;
+  } catch (e) { console.error('[channel] load failed:', e.message); }
+}
+function saveChannelPosts() {
+  try { fs.writeFileSync(CHANNEL_POSTS_FILE, JSON.stringify(channelPostsToday)); }
+  catch (e) { console.error('[channel] save failed:', e.message); }
+}
+loadChannelPosts();
+
+const CHANNEL_POSTS_CATALOG = {
+  daily_challenge: {
+    text: "🌅 *Today's Daily Challenge is live!*\n\nSame seed, same dolls — every player gets the exact same queue today. " +
+          "Who's going to top the daily leaderboard?\n\n_Resets in 24 hours._",
+    button: { text: "🎯 PLAY DAILY", url: "https://t.me/MatryoshkaGameBot/app" },
+  },
+  power_hour_live: {
+    text: "⚡ *POWER HOUR IS LIVE!*\n\nEvery gem. Every reward. Every chest. *Doubled* for the next 60 minutes.\n\n" +
+          "Stack your boosters. Climb hard. The window closes at 19:00 UTC.",
+    button: { text: "🚀 GO NOW", url: "https://t.me/MatryoshkaGameBot/app" },
+  },
+  tournament_closing: {
+    text: "🏆 *Tournament closes in 5 hours!*\n\nLast push of the week. One great run can move you into the prize zone.\n\n" +
+          "Top 10 take home Stars. Top 3 take home a LOT of Stars.",
+    button: { text: "🏆 CLIMB NOW", url: "https://t.me/MatryoshkaGameBot/app" },
+  },
+};
+
+async function sendChannelPost(slot) {
+  const post = CHANNEL_POSTS_CATALOG[slot];
+  if (!post || !BOT_TOKEN) return { ok: false, reason: 'unknown slot or no token' };
+  try {
+    const r = await fetch(`${TELEGRAM_API}/sendMessage`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: CHANNEL_USERNAME,
+        text: post.text,
+        parse_mode: 'Markdown',
+        reply_markup: { inline_keyboard: [[post.button]] },
+      }),
+    });
+    const j = await r.json();
+    if (j && j.ok) {
+      console.log('[channel] posted slot=' + slot + ' msg_id=' + j.result.message_id);
+      mpTrack('Channel Post Sent', 'server', { slot, message_id: j.result.message_id });
+      return { ok: true, message_id: j.result.message_id };
+    }
+    console.warn('[channel] post failed slot=' + slot + ' err=' + (j && j.description));
+    mpTrack('Channel Post Failed', 'server', { slot, reason: (j && j.description) || 'unknown' });
+    return { ok: false, reason: (j && j.description) || 'unknown' };
+  } catch (e) {
+    console.error('[channel] throw:', e.message);
+    return { ok: false, reason: e.message };
+  }
+}
+
+async function channelPostLoop() {
+  if (!BOT_TOKEN) return;
+  const now = new Date();
+  const ymd = now.getUTCFullYear() + '-' +
+              String(now.getUTCMonth() + 1).padStart(2, '0') + '-' +
+              String(now.getUTCDate()).padStart(2, '0');
+  if (channelPostsToday.ymd !== ymd) {
+    channelPostsToday = { ymd, slots: [] };
+    saveChannelPosts();
+  }
+  const h = now.getUTCHours();
+  const m = now.getUTCMinutes();
+  const dow = now.getUTCDay();   // 0 = Sunday
+
+  const tryFire = async (slot, condition) => {
+    if (!condition) return;
+    if (channelPostsToday.slots.includes(slot)) return;
+    const r = await sendChannelPost(slot);
+    if (r.ok) {
+      channelPostsToday.slots.push(slot);
+      saveChannelPosts();
+    }
+  };
+
+  // 00:05-00:10 UTC daily — new daily challenge live
+  await tryFire('daily_challenge', h === 0 && m >= 5 && m < 10);
+  // 18:00-18:05 UTC daily — power hour starts
+  await tryFire('power_hour_live', h === 18 && m < 5);
+  // Sunday 19:00-19:05 UTC — tournament closing reminder (5h before Mon 00:00)
+  await tryFire('tournament_closing', dow === 0 && h === 19 && m < 5);
+}
+
+// Curl-friendly admin endpoint to fire any slot immediately for testing.
+// Bypasses the time-window check + dedupe so you can verify the system
+// without waiting for the scheduled UTC hour.
+//   curl -X POST https://.../api/admin/channel-post \
+//     -H "x-setup-key: $BOT_TOKEN" -H "Content-Type: application/json" \
+//     -d '{"slot":"power_hour_live"}'
+app.post('/api/admin/channel-post', async (req, res) => {
+  if (!BOT_TOKEN) return res.status(500).json({ error: 'BOT_TOKEN not set' });
+  if (req.headers['x-setup-key'] !== BOT_TOKEN) {
+    return res.status(403).json({ error: 'wrong setup key' });
+  }
+  const { slot } = req.body || {};
+  if (!slot || !CHANNEL_POSTS_CATALOG[slot]) {
+    return res.status(400).json({ error: 'unknown slot',
+      available: Object.keys(CHANNEL_POSTS_CATALOG) });
+  }
+  const r = await sendChannelPost(slot);
+  res.json(r);
+});
+
 // ============ Boot ============
 app.listen(PORT, () => {
   console.log(`Matryoshka serving on port ${PORT}`);
@@ -2000,6 +2128,10 @@ app.listen(PORT, () => {
     setInterval(notifyLoop, TWO_MIN);
     console.log('[notify] loop armed — every 2 min');
     console.log('[notify] kinds:', Object.keys(NOTIF_COPY).join(', '));
+    // v0.3.53 — channel auto-posts to @MatryoshkaMerge on UTC clock.
+    setInterval(channelPostLoop, TWO_MIN);
+    console.log('[channel] post loop armed — every 2 min, target ' + CHANNEL_USERNAME);
+    console.log('[channel] slots:', Object.keys(CHANNEL_POSTS_CATALOG).join(', '));
   }
   // Hourly: roll over tournaments even without submissions, GC ephemeral state.
   setInterval(ensureTournament, 60 * 60 * 1000);
