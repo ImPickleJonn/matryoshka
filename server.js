@@ -357,9 +357,9 @@ const SKUS = {
   },
   starter_pack: {
     id: 'starter_pack', title: 'Starter Pack · Best Value',
-    description: '1,500 gems + 3 revives + Khokhloma skin.',
+    description: '1,500 gems + 3 revives.',
     price: 199, priceUsd: '$2.59',
-    grant: { gems: 1500, revives: 3, skins: ['khokhloma'] },
+    grant: { gems: 1500, revives: 3 },
   },
   gems_big: {
     id: 'gems_big', title: 'Big Vault · 3,500 Gems',
@@ -371,26 +371,9 @@ const SKUS = {
     description: '12,000 gems — best value.',
     price: 750, priceUsd: '$9.99', grant: { gems: 12000 },
   },
-  skin_khokhloma: {
-    id: 'skin_khokhloma', title: 'Khokhloma Skin',
-    description: 'Black-and-gold lacquer art on every doll.',
-    price: 150, priceUsd: '$1.99', grant: { skins: ['khokhloma'] },
-  },
-  skin_gzhel: {
-    id: 'skin_gzhel', title: 'Gzhel Skin',
-    description: 'Cobalt-and-white porcelain pattern.',
-    price: 150, priceUsd: '$1.99', grant: { skins: ['gzhel'] },
-  },
-  skin_neon: {
-    id: 'skin_neon', title: 'Neon Skin',
-    description: 'Glowing cyber dolls on a dark stage.',
-    price: 200, priceUsd: '$2.59', grant: { skins: ['neon'] },
-  },
-  skin_wood: {
-    id: 'skin_wood', title: 'Wood Skin',
-    description: 'Hand-carved wooden dolls — warm and natural.',
-    price: 200, priceUsd: '$2.59', grant: { skins: ['wood'] },
-  },
+  // v0.3.56 — removed all skin SKUs (skin_khokhloma, skin_gzhel,
+  // skin_neon, skin_wood). Pickle is redesigning the doll art entirely;
+  // the old palette swaps are paused until the new direction lands.
   battle_pass: {
     id: 'battle_pass', title: 'Season Pass · 30 Days',
     description: 'Daily-mission rewards x2, exclusive skin, and gem bonus.',
