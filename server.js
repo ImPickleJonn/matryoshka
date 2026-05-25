@@ -683,6 +683,59 @@ app.post('/api/create-revive-invoice', async (req, res) => {
   } catch (e) { res.status(500).json({ error: String(e && e.message || e) }); }
 });
 
+// v0.3.55 — server-side 'App Opened' fire for clean retention.
+// Client calls this once on boot AND on visibilitychange→visible (>5min
+// gap). Server-side is more reliable than client-side Mixpanel JS (no
+// adblocker/network/JS-error risk) and validates the user via initData
+// (can't be spoofed).
+//
+// Geo: we forward the client IP via the `ip` property so Mixpanel
+// resolves $country_code from the user's actual location, not Render's
+// datacenter. Without this, server-side events all look like they
+// come from Oregon (Render's HQ).
+//
+// Rate limiting: at most once per user per 15 min so quick reloads
+// don't inflate event counts. The 'restored' type still fires
+// distinctly within the window.
+const appOpenedLastFireByUser = new Map();
+app.post('/api/app/opened', (req, res) => {
+  const { initData, type } = req.body || {};
+  const user = validateInitData(initData || '');
+  if (!user) return res.status(401).json({ error: 'invalid initData' });
+  const fireType = (type === 'restored') ? 'restored' : 'initial';
+  // Rate-limit 'initial' (15 min). 'restored' has its own client-side
+  // 5-min throttle, so no extra server gating needed.
+  const lastFire = appOpenedLastFireByUser.get(user.id) || 0;
+  const FIFTEEN_MIN = 15 * 60 * 1000;
+  if (fireType === 'initial' && Date.now() - lastFire < FIFTEEN_MIN) {
+    return res.json({ ok: true, skipped: 'rate_limited', last_fire_ago_sec: Math.round((Date.now()-lastFire)/1000) });
+  }
+  appOpenedLastFireByUser.set(user.id, Date.now());
+  // Forward client IP for Mixpanel geo resolution. Render sets
+  // x-forwarded-for; fall back to req.ip if absent (local dev).
+  const xff = req.headers['x-forwarded-for'] || '';
+  const clientIp = String(xff).split(',')[0].trim() || req.ip || '';
+  // Pull user state for richer event properties.
+  const stored = users[String(user.id)] || users[user.id] || {};
+  mpTrack('App Opened', String(user.id), {
+    type: fireType,
+    streak: stored.streak || 0,
+    total_games_ever: stored.totalGamesEver || 0,
+    best: stored.best || 0,
+    gems: stored.gems || 0,
+    ftue_done: !!stored.ftueDone,
+    lang: (stored.settings && stored.settings.lang) || user.language_code || 'en',
+    is_premium: !!user.is_premium,
+    ip: clientIp,                    // Mixpanel uses this for geo
+    fired_from: 'server',
+  });
+  // Also touch userState so the user gets counted in notif audience
+  // (in case they haven't heartbeated yet this session).
+  rememberUser(user.id, { chatId: user.id, lastActiveAt: Date.now(),
+    lang: user.language_code || 'en' });
+  res.json({ ok: true, fired: true, type: fireType });
+});
+
 app.post('/api/heartbeat', (req, res) => {
   const { initData, lang, streak, streakRiskAt } = req.body || {};
   const user = validateInitData(initData);

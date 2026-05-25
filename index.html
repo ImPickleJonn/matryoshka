@@ -1629,7 +1629,7 @@
    ========================================================= */
 'use strict';
 
-const MX_VERSION = 'v0.3.54';
+const MX_VERSION = 'v0.3.55';
 const MX = {
   token: '',
   distinctId: null,
@@ -6602,20 +6602,39 @@ function openFtueIfFirst() {
       open_campaign: ATTRIB.campaign,
       open_medium: ATTRIB.medium,
     });
-    // v0.3.54 — dedicated 'App Opened' event for retention analysis.
-    // Why a new event when 'Session Start' already exists?
-    // Mixpanel retention reports using "Any Event" inflate the cohort
-    // with server-side events like 'Notification Sent' that don't
-    // represent actual user activity. 'App Opened' is guaranteed to
-    // fire ONLY from the client, ONLY on a real Mini App open or a
-    // restore-from-background (>5 min gap), making it the canonical
-    // signal for retention curves. Born = first ever App Opened,
-    // Return = subsequent App Opened on later days.
+    // v0.3.55 — Retention attribution shifted from client-side to
+    // server-side. The canonical 'App Opened' event now fires from
+    // POST /api/app/opened (server-side, immune to client failures).
     //
-    // type: 'initial'  — fresh boot of the Mini App (this branch)
-    // type: 'restored' — visibility returned to visible after 5+ min away
+    // Why? Client-side Mixpanel calls can be silently dropped by
+    // adblockers, slow networks, JS errors above this line in boot,
+    // or browser tab-close before MX.init completes. Server-side fire
+    // hits /api/app/opened over plain HTTP; once the request arrives
+    // at Render, the event WILL be logged. Validated by initData so
+    // it can't be spoofed.
+    //
+    // The 'App Boot Client' event below STILL fires client-side as a
+    // diagnostic — comparing client vs server counts catches deliveries
+    // failures (e.g., 'client fired 800 times but server only 750 →
+    // 50 client opens never reached the server, likely network issues').
     window.__lastAppOpenAt = Date.now();
-    MX.track('App Opened', {
+    const tellServerAppOpened = (type) => {
+      const initData = getInitData ? getInitData() : (tg && tg.initData) || '';
+      if (!initData) return;   // only fire when inside Telegram WebApp
+      try {
+        fetch('/api/app/opened', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ initData, type }),
+          keepalive: true,    // survive page-unload races
+        }).catch(() => {});
+      } catch (e) {}
+    };
+    tellServerAppOpened('initial');
+    // Diagnostic client-side event — fires alongside the server one.
+    // Used for client/server cross-check (e.g. 'how many opens did
+    // we lose to client-side failures?').
+    MX.track('App Boot Client', {
       type: 'initial',
       streak: state.streak || 0,
       total_games_ever: state.totalGamesEver || 0,
@@ -6631,7 +6650,8 @@ function openFtueIfFirst() {
       const now = Date.now();
       if (now - (window.__lastAppOpenAt || 0) < 5 * 60 * 1000) return;
       window.__lastAppOpenAt = now;
-      MX.track('App Opened', {
+      tellServerAppOpened('restored');
+      MX.track('App Boot Client', {
         type: 'restored',
         streak: state.streak || 0,
         total_games_ever: state.totalGamesEver || 0,
