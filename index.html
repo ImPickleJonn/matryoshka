@@ -2447,13 +2447,19 @@ function tgReady() {
   try {
     tg.ready();
     tg.expand();
-    // Bot API 8.0+ (late 2024): request TRUE fullscreen — hides Telegram's
-    // header chrome (X / bot name / ⋮) so the whole screen is gameplay.
-    // Older clients silently ignore. Also disable the vertical-swipe-down
-    // gesture so the player doesn't accidentally collapse the Mini App
-    // while flicking the carrier doll around.
-    try { tg.requestFullscreen && tg.requestFullscreen(); } catch (e) {}
-    try { tg.disableVerticalSwipes && tg.disableVerticalSwipes(); } catch (e) {}
+    // v0.3.52 — ONLY request true fullscreen on mobile (ios/android).
+    // On Telegram Desktop / Web, fullscreen takes over the entire
+    // client window which is jarring — players expect the small modal
+    // window that's standard for Mini Apps. Mobile keeps the chrome-
+    // hidden UX since the small screen needs every pixel.
+    // tg.platform values: 'ios' | 'android' | 'tdesktop' | 'macos' |
+    //   'web' | 'weba' | 'webk' | 'unigram' | 'unknown'
+    const __plat = (tg.platform || '').toLowerCase();
+    const __isMobile = __plat === 'ios' || __plat === 'android';
+    if (__isMobile) {
+      try { tg.requestFullscreen && tg.requestFullscreen(); } catch (e) {}
+      try { tg.disableVerticalSwipes && tg.disableVerticalSwipes(); } catch (e) {}
+    }
     tg.setHeaderColor && tg.setHeaderColor('#a51d30');
     tg.setBackgroundColor && tg.setBackgroundColor('#a51d30');
     // Re-fit the canvas whenever Telegram tells us the safe area or
@@ -2511,8 +2517,11 @@ function applySafeArea() {
   // much empty space between the top of the screen and the topbar.
   // 110 still clears the Telegram chrome on most clients (iPhone
   // Dynamic Island chrome bottom ~100-105px) with a tiny buffer.
-  // The fullscreen check stays disabled — always apply the floor.
-  if (top < 110) top = 110;
+  // v0.3.52 — on Telegram Desktop/Web (where we no longer go fullscreen)
+  // the chrome is a thin title bar, not the bulky mobile chrome, so we
+  // use a much smaller floor of 16px to avoid empty top whitespace.
+  const __minTop = (isIOS || isAndroid) ? 110 : 16;
+  if (top < __minTop) top = __minTop;
   let bottomCap;
   if (isAndroid) bottomCap = 8;
   else if (isIOS) bottomCap = 38;
