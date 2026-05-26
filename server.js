@@ -84,6 +84,10 @@ const SYNC_FIELDS = [
   'missions', 'achievements',
   'battlePassUntil',
   'firstSeenAt', 'welcomed',
+  // v0.3.57 — starter-offer state. shown=true once user saw the popup,
+  // purchased=true once they bought the SKU. Both flags are read by
+  // client to decide whether to show the offer button + popup.
+  'starterOfferShown', 'starterOfferPurchased',
 ];
 
 function loadLeaderboard() {
@@ -374,6 +378,17 @@ const SKUS = {
   // v0.3.56 — removed all skin SKUs (skin_khokhloma, skin_gzhel,
   // skin_neon, skin_wood). Pickle is redesigning the doll art entirely;
   // the old palette swaps are paused until the new direction lands.
+  // v0.3.57 — first-loss "Starter Offer" special pack. Pops automatically
+  // after a player's first game-over (standard F2P fail-offer pattern)
+  // and is also accessible from a dedicated button on the Play tab.
+  // Hidden across the UI once purchased (server records via the grant
+  // path → client flips starterOfferPurchased=true on success).
+  first_loss_pack: {
+    id: 'first_loss_pack', title: 'Starter Offer · Special',
+    description: '5 Revives + 1 Rainbow Doll — get back in and keep climbing.',
+    price: 229, priceUsd: '$2.99',
+    grant: { revives: 5, rainbows: 1, starterOfferPurchased: 1 },
+  },
   battle_pass: {
     id: 'battle_pass', title: 'Season Pass · 30 Days',
     description: 'Daily-mission rewards x2, exclusive skin, and gem bonus.',
@@ -1054,6 +1069,43 @@ app.post('/api/state/save', (req, res) => {
   users[user.id] = u;
   saveUsers();
   res.json({ ok: true, writes });
+});
+
+// v0.3.57 — admin "delete my own progress" cheat. Useful for testing
+// the first-loss starter offer / FTUE / new-player flows without
+// having to spin up a fresh Telegram account.
+//
+// CRITICAL safety properties:
+//   - Authenticated via initData (HMAC-signed by Telegram, can't spoof)
+//   - Only deletes the caller's own state — uses user.id from initData,
+//     NOT a uid passed by the client
+//   - Gated by isAdmin(user.id) so non-admins can't trigger it even if
+//     they figure out the endpoint exists
+//   - Touches both users.json (game state) and userState (notif state)
+//     so it's a clean wipe end-to-end
+app.post('/api/admin/delete-self', (req, res) => {
+  const { initData } = req.body || {};
+  const user = validateInitData(initData || '');
+  if (!user) return res.status(401).json({ error: 'invalid initData' });
+  if (!isAdmin(user.id)) return res.status(403).json({ error: 'admin only' });
+  const uid = String(user.id);
+  let removed = { from_users: false, from_userstate: false, from_pending: false };
+  if (users[uid] || users[user.id]) {
+    delete users[uid]; delete users[user.id];
+    saveUsers();
+    removed.from_users = true;
+  }
+  if (userState.has(user.id) || userState.has(uid)) {
+    userState.delete(user.id); userState.delete(uid);
+    saveUserState();
+    removed.from_userstate = true;
+  }
+  if (pendingByUser.has(user.id) || pendingByUser.has(uid)) {
+    pendingByUser.delete(user.id); pendingByUser.delete(uid);
+    removed.from_pending = true;
+  }
+  console.log('[admin] deleted self uid=' + uid, removed);
+  res.json({ ok: true, uid, removed });
 });
 
 app.post('/api/admin/whoami', (req, res) => {
