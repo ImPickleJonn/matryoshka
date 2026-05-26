@@ -1672,7 +1672,7 @@
    ========================================================= */
 'use strict';
 
-const MX_VERSION = 'v0.3.61';
+const MX_VERSION = 'v0.3.62';
 const MX = {
   token: '',
   distinctId: null,
@@ -2470,9 +2470,15 @@ const defaultState = () => ({
   // v0.3.61 — starterOfferTier (1..6) drives escalating 5-pack chain.
   // Tier 1 = $2.99 base offer. After each purchase, tier advances to
   // unlock the next ($4.99 → $7.99 → $10.99 → $14.99). Tier 6 = done.
+  // v0.3.62 — starterOfferReadyAfterLoss gates whether the NEXT tier's
+  // star button is allowed to show. T1 ignores this (always visible).
+  // T2+ require at least one game-over after the previous purchase
+  // before the button reappears (popup still fires on that same loss,
+  // which is what unlocks the button for the rest of the session).
   starterOfferShown: false,
   starterOfferPurchased: false,
   starterOfferTier: 1,
+  starterOfferReadyAfterLoss: true,
 });
 
 let state = defaultState();
@@ -4386,6 +4392,22 @@ function endGame() {
   save();
   submitScore(score);
   setTimeout(() => showGameOverModal(wasBest), 350);
+  // v0.3.62 — every game-over unlocks the "ready" gate so the star
+  // button for the current tier becomes visible (if it was hidden
+  // because the player just bought the prior tier). This is what
+  // implements Pickle's rule: "show next tier's button only after a
+  // loss has occurred since the previous purchase". T1 ignores the
+  // gate so new players see it from the start.
+  if (currentStarterTier() <= 5 && state.starterOfferReadyAfterLoss === false) {
+    state.starterOfferReadyAfterLoss = true;
+    save();
+    // Force-refresh the button visibility right now (don't wait for
+    // the next hudUpdate tick — newGame() triggers one but timing
+    // matters here so the player sees the button reappear before
+    // the offer popup fires).
+    const btn = document.getElementById('starter-offer-btn');
+    if (btn) btn.style.display = shouldShowStarterButton() ? 'inline-flex' : 'none';
+  }
   // v0.3.59 — Starter Offer popup fires AFTER every game-over until
   // purchased. Cadence = every 2 losses to balance conversion vs annoy.
   // v0.3.61 — tier-aware. Fires whichever tier is current. Caps out
@@ -4601,6 +4623,18 @@ function currentStarterTier() {
   let tier = state.starterOfferTier;
   if (!tier) tier = state.starterOfferPurchased ? 2 : 1;
   return Math.max(1, Math.min(6, tier));
+}
+
+// v0.3.62 — the always-on star button is gated for T2+ until the user
+// loses a match after the previous tier purchase. T1 always shows from
+// the start (new players need a visible entry point). After tier
+// advance: button hides → next game-over flips the ready flag back to
+// true → button reappears.
+function shouldShowStarterButton() {
+  const tier = currentStarterTier();
+  if (tier > 5) return false;        // chain exhausted
+  if (tier === 1) return true;        // T1 always visible
+  return state.starterOfferReadyAfterLoss !== false;
 }
 
 function openStarterOfferModal(trigger) {
@@ -4867,10 +4901,12 @@ function hudUpdate() {
   }
   document.getElementById('streak-count').textContent = state.streak || 0;
   // v0.3.57 — Starter Offer button visibility.
-  // v0.3.61 — visibility now driven by tier chain: hide only after all
-  // 5 tiers purchased (currentStarterTier() returns 6).
+  // v0.3.61 — visibility now driven by tier chain.
+  // v0.3.62 — additionally gated by shouldShowStarterButton() which
+  // hides T2+ tiers until a loss has happened since the previous
+  // purchase (T1 still shows from the start for new players).
   const soBtn = document.getElementById('starter-offer-btn');
-  if (soBtn) soBtn.style.display = (currentStarterTier() > 5) ? 'none' : 'inline-flex';
+  if (soBtn) soBtn.style.display = shouldShowStarterButton() ? 'inline-flex' : 'none';
   document.getElementById('best-score').textContent = state.mode === 'daily'
     ? (state.dailyYMD === dailyYMD ? (state.dailyBestToday || 0) : 0)
     : (state.best || 0);
@@ -5189,13 +5225,16 @@ function applyGrant(g) {
   // v0.3.61 — escalating tier chain. Each pack grants the next tier
   // number. After tier 5 is bought, the SKU grants tier:6 which makes
   // currentStarterTier() > 5 and hides everything permanently.
+  // v0.3.62 — also lock the "ready" gate: button stays hidden until
+  // user has a loss before the NEXT tier's button reappears.
   if (g.starterOfferTier) {
     state.starterOfferTier = Math.max(state.starterOfferTier || 1, g.starterOfferTier);
     state.starterOfferShown = false;   // reset so next loss re-pops the NEW tier
+    state.starterOfferReadyAfterLoss = false;
   }
-  // Hide button if no more offers in the chain
+  // Refresh button visibility via the helper (handles tier chain + gate)
   const btn = document.getElementById('starter-offer-btn');
-  if (btn) btn.style.display = (currentStarterTier() > 5) ? 'none' : 'inline-flex';
+  if (btn) btn.style.display = shouldShowStarterButton() ? 'inline-flex' : 'none';
   if (g.seasonPremium) {
     ensureSeasonFresh();
     state.season.premium = true;

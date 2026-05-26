@@ -88,7 +88,10 @@ const SYNC_FIELDS = [
   // purchased=true once they bought the SKU. Both flags are read by
   // client to decide whether to show the offer button + popup.
   // v0.3.61 — added starterOfferTier (1..6) for escalating 5-tier chain.
+  // v0.3.62 — starterOfferReadyAfterLoss gates T2+ button visibility:
+  // false right after a purchase, true once a game-over fires.
   'starterOfferShown', 'starterOfferPurchased', 'starterOfferTier',
+  'starterOfferReadyAfterLoss',
 ];
 
 function loadLeaderboard() {
@@ -1292,7 +1295,7 @@ app.get('/api/diag', async (req, res) => {
     if (st.lastActiveAt && (now - st.lastActiveAt) < 7 * 24 * 60 * 60 * 1000) activeLastWeek++;
   }
   const out = {
-    version: 'v0.3.61',
+    version: 'v0.3.62',
     bot_token_configured: !!BOT_TOKEN,
     bot_username: BOT_USERNAME || null,
     public_url: getPublicUrl() || null,
