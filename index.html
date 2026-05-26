@@ -101,9 +101,10 @@
     /* v0.3.39 — moved BELOW the season strip and right next to the
        canvas (was at safe-top+62 above the strip). Order is now
        topbar → season-strip → score-row → canvas.
-       v0.3.59 — bumped from safe-top+102 → safe-top+132 to make room
-       for the small Starter Offer pill that sits at safe-top+96. */
-    position: absolute; top: calc(var(--tg-safe-top) + 132px);
+       v0.3.60 — back to safe-top+102 (the v0.3.59 pushdown was for the
+       wide starter-pill that has now been moved to a small square
+       sitting INSIDE this same vertical band, no pushdown needed). */
+    position: absolute; top: calc(var(--tg-safe-top) + 102px);
     left: 0; right: 0;
     display: flex; align-items: center; justify-content: center;
     gap: 18px;
@@ -172,9 +173,10 @@
            the canvas (lots of vertical space reclaimed)
          - daily mode-row gone (was at safe-top+116)
        Net: ~62px less padding above the jar.
-       v0.3.59 — bumped 156 → 186 to make room for the small Starter
-       Offer pill between the season strip and the score-row. */
-    top: calc(var(--tg-safe-top) + 186px);
+       v0.3.60 — back to safe-top+156. v0.3.59 pushdown is reverted now
+       that the Starter Offer button is a small square in the score
+       band, not a wide pill below the season strip. */
+    top: calc(var(--tg-safe-top) + 156px);
     /* CSS absolute positioning ignores the parent's padding — so we can't
        rely on #app's padding-bottom to push us above the bottom tabs. We
        explicitly subtract the tab height + safe-area-bottom here. */
@@ -709,39 +711,32 @@
     box-shadow: 0 1px 3px rgba(0,0,0,0.3);
   }
 
-  /* v0.3.57 — Starter Offer button (sits below season strip on Play tab).
-     v0.3.59 — Repositioned. Season strip is absolutely-positioned at
-     top: safe-top+50, height 44px. Score-row is at top: safe-top+102.
-     We sit absolutely between them at top: safe-top+96, compact (~46%
-     screen width), centered. The score-row + everything below gets
-     pushed down 32px (via offset added in v0.3.59) to make room.
-     Always visible until user buys the offer. Pulsing gold to attract
-     attention. */
+  /* v0.3.60 — Starter Offer button = small star-only rounded square,
+     sits to the LEFT of the score row (same vertical band as the
+     Best / Score / Merges readouts). Same height as the score icons
+     so it visually lines up. Pulses gold to draw attention. Hidden
+     once purchased (display:none via hudUpdate). */
   .starter-offer-btn {
     position: absolute;
-    top: calc(var(--tg-safe-top) + 96px);
-    left: 50%; transform: translateX(-50%);
+    top: calc(var(--tg-safe-top) + 102px);
+    left: 10px;
     z-index: 26;
-    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-    padding: 5px 12px;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 36px; height: 36px;
+    padding: 0;
     background: linear-gradient(135deg, #fdc500 0%, #ff7a00 100%);
     border: 1.5px solid #ffe066;
-    border-radius: 999px;
+    border-radius: 10px;
     color: #2b0a10;
-    font-weight: 800; font-size: 11px;
-    white-space: nowrap;
     box-shadow: 0 2px 8px rgba(255,150,0,0.45);
     cursor: pointer;
     animation: starter-offer-pulse 2.2s ease-in-out infinite;
   }
-  .starter-offer-btn:active { transform: translateX(-50%) scale(0.95); }
-  .starter-offer-btn .so-burst { font-size: 13px; }
-  .starter-offer-btn .so-label { letter-spacing: 1px; font-size: 10px; }
-  .starter-offer-btn .so-content { font-size: 11px; font-weight: 700; }
-  .starter-offer-btn .so-price {
-    background: #2b0a10; color: #fdc500;
-    padding: 2px 6px; border-radius: 999px; font-size: 10px;
-    box-shadow: inset 0 1px 2px rgba(0,0,0,0.5);
+  .starter-offer-btn:active { transform: scale(0.92); }
+  .starter-offer-btn .so-burst {
+    font-size: 20px;
+    line-height: 1;
+    filter: drop-shadow(0 0 4px rgba(255,255,255,0.7));
   }
   @keyframes starter-offer-pulse {
     0%, 100% { box-shadow: 0 2px 8px rgba(255,150,0,0.45); }
@@ -1484,12 +1479,10 @@
       <div class="season-strip-next-reward" id="season-strip-next-reward"></div>
     </button>
 
-    <!-- v0.3.57 — Starter Offer button (always-on until purchased) -->
-    <button class="starter-offer-btn" id="starter-offer-btn">
+    <!-- v0.3.57 — Starter Offer button (always-on until purchased)
+         v0.3.60 — small star-only square button, left of the score row -->
+    <button class="starter-offer-btn" id="starter-offer-btn" aria-label="Starter Pack offer">
       <span class="so-burst">⭐</span>
-      <span class="so-label">STARTER PACK</span>
-      <span class="so-content">5 🟢 + 1 🌈</span>
-      <span class="so-price">$2.99</span>
     </button>
 
     <div class="score-row">
@@ -1679,7 +1672,7 @@
    ========================================================= */
 'use strict';
 
-const MX_VERSION = 'v0.3.59';
+const MX_VERSION = 'v0.3.60';
 const MX = {
   token: '',
   distinctId: null,
@@ -4422,10 +4415,10 @@ function showGameOverModal(wasBest) {
   // Stars price (25, 50, 75, …) per paid revive in the current run.
   let reviveBtn = '';
   if (hasFreeRevive) {
-    reviveBtn = `<button class="btn revive" id="m-revive-free">🟢 ${t('use_revive')} (${state.revives})</button>`;
+    reviveBtn = `<button class="btn revive" id="m-revive-free">❤️ ${t('use_revive')} (${state.revives})</button>`;
   } else if (canPaidRevive) {
     const tmpl = t('revive_for_stars') || 'Revive for {n} ⭐';
-    reviveBtn = `<button class="btn revive" id="m-revive-paid">🟢 ${tmpl.replace('{n}', paidPrice)}</button>`;
+    reviveBtn = `<button class="btn revive" id="m-revive-paid">❤️ ${tmpl.replace('{n}', paidPrice)}</button>`;
   }
 
   // Build the Season Pass snapshot — bar starts at the pre-game position
@@ -4543,7 +4536,7 @@ function openStarterOfferModal() {
       <div style="color:var(--ink-soft);font-size:13px;margin-bottom:12px">Get back in. Climb harder.</div>
       <div style="background:linear-gradient(135deg,#fff5dc,#ffe6ad);border:2px solid var(--gold-deep);border-radius:14px;padding:14px;margin:6px 0 14px;box-shadow:0 4px 12px rgba(200,150,0,0.25)">
         <div style="display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:8px">
-          <span style="font-size:26px">🟢</span>
+          <span style="font-size:26px">❤️</span>
           <div style="text-align:left">
             <div style="font-weight:800;font-size:17px;color:#2a1810">×5 Revives</div>
             <div style="font-size:12px;color:#7a5520">Clear half the jar, keep playing</div>
@@ -4557,7 +4550,6 @@ function openStarterOfferModal() {
           </div>
         </div>
       </div>
-      <div style="font-size:11px;color:var(--ink-soft);margin-bottom:6px">One-time offer — never seen again once dismissed.</div>
     </div>
     <div class="modal-btns">
       <button class="btn revive" id="m-starter-buy" style="font-size:18px;padding:14px;background:linear-gradient(135deg,#1ec850,#0d8a30)">⭐ Get for 229 Stars (~$2.99)</button>
@@ -4866,7 +4858,7 @@ document.querySelectorAll('.tab-btn').forEach(b => {
 const SKU_DISPLAY = [
   { id: 'starter_pack',  icon: '🎁', price: 199, feature: true,
     title_key: 'Starter Pack', desc: '1,500 gems + 3 revives + Khokhloma skin' },
-  { id: 'revive',        icon: '🟢', price: 30,
+  { id: 'revive',        icon: '❤️', price: 30,
     title_key: 'Continue · Revive', desc: 'Clear top 3 dolls, keep your run' },
   { id: 'preview_pack',  icon: '🔭', price: 50,
     title_key: 'Next-Doll Previews ×10', desc: 'See 2 dolls ahead for 10 drops' },
@@ -4899,7 +4891,7 @@ const SKU_DISPLAY = [
 // the most useful in-game items, so this is where gems pay off. Packs,
 // skins, and season-pass premium stay Stars-only — Stars stay premium.
 const GEM_SHOP_ITEMS = [
-  { id: 'revive_oneshot_gems', icon: '🟢', gems: 250, title: 'Revive · ×1', desc: 'Clear top dolls, keep playing', grant: { revives: 1 } },
+  { id: 'revive_oneshot_gems', icon: '❤️', gems: 250, title: 'Revive · ×1', desc: 'Clear top dolls, keep playing', grant: { revives: 1 } },
   { id: 'hammer_single_gems',  icon: '🔨', gems: 200, title: 'Hammer · ×1', desc: 'Tap a doll to remove it',       grant: { hammers: 1 } },
   { id: 'shake_single_gems',   icon: '🌀', gems: 150, title: 'Shake · ×1',  desc: 'Jostle every doll in the jar',   grant: { shakes: 1 } },
   { id: 'undo_single_gems',    icon: '↶',  gems: 150, title: 'Undo · ×1',   desc: 'Take back your last drop',       grant: { undos: 1 } },
@@ -5308,7 +5300,7 @@ const SPIN_PRIZES = [
   { kind: 'shake',   n: 1,    w: 11, label: '🌀 ×1', color: '#2a9d8f' },
   { kind: 'shake',   n: 3,    w: 4,  label: '🌀 ×3', color: '#176d62' },
   { kind: 'undo',    n: 2,    w: 8,  label: '↩️ ×2', color: '#457b9d' },
-  { kind: 'revive',  n: 1,    w: 5,  label: '🟢 +Revive', color: '#39ff14' },
+  { kind: 'revive',  n: 1,    w: 5,  label: '❤️ +Revive', color: '#39ff14' },
   { kind: 'jackpot', n: 1,    w: 2,  label: '🏆 Jackpot', color: '#fff' },
 ];
 
@@ -6003,7 +5995,7 @@ function formatSeasonReward(grant) {
   if (grant.hammers)  return '🔨 ×' + grant.hammers;
   if (grant.shakes)   return '🌀 ×' + grant.shakes;
   if (grant.undos)    return '↶ ×' + grant.undos;
-  if (grant.revives)  return '🟢 ×' + grant.revives;
+  if (grant.revives)  return '❤️ ×' + grant.revives;
   if (grant.rainbows) return '🌈 ×' + grant.rainbows;
   return '🎁';
 }
