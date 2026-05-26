@@ -100,8 +100,10 @@
   .score-row {
     /* v0.3.39 — moved BELOW the season strip and right next to the
        canvas (was at safe-top+62 above the strip). Order is now
-       topbar → season-strip → score-row → canvas. */
-    position: absolute; top: calc(var(--tg-safe-top) + 102px);
+       topbar → season-strip → score-row → canvas.
+       v0.3.59 — bumped from safe-top+102 → safe-top+132 to make room
+       for the small Starter Offer pill that sits at safe-top+96. */
+    position: absolute; top: calc(var(--tg-safe-top) + 132px);
     left: 0; right: 0;
     display: flex; align-items: center; justify-content: center;
     gap: 18px;
@@ -169,8 +171,10 @@
          - score-row moved BELOW the season strip and right next to
            the canvas (lots of vertical space reclaimed)
          - daily mode-row gone (was at safe-top+116)
-       Net: ~62px less padding above the jar. */
-    top: calc(var(--tg-safe-top) + 156px);
+       Net: ~62px less padding above the jar.
+       v0.3.59 — bumped 156 → 186 to make room for the small Starter
+       Offer pill between the season strip and the score-row. */
+    top: calc(var(--tg-safe-top) + 186px);
     /* CSS absolute positioning ignores the parent's padding — so we can't
        rely on #app's padding-bottom to push us above the bottom tabs. We
        explicitly subtract the tab height + safe-area-bottom here. */
@@ -706,42 +710,42 @@
   }
 
   /* v0.3.57 — Starter Offer button (sits below season strip on Play tab).
+     v0.3.59 — Repositioned. Season strip is absolutely-positioned at
+     top: safe-top+50, height 44px. Score-row is at top: safe-top+102.
+     We sit absolutely between them at top: safe-top+96, compact (~46%
+     screen width), centered. The score-row + everything below gets
+     pushed down 32px (via offset added in v0.3.59) to make room.
      Always visible until user buys the offer. Pulsing gold to attract
-     attention without being annoying. */
+     attention. */
   .starter-offer-btn {
-    display: flex; align-items: center; justify-content: space-between; gap: 6px;
-    width: calc(100% - 24px); margin: 6px 12px 0;
-    padding: 8px 12px;
+    position: absolute;
+    top: calc(var(--tg-safe-top) + 96px);
+    left: 50%; transform: translateX(-50%);
+    z-index: 26;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 5px 12px;
     background: linear-gradient(135deg, #fdc500 0%, #ff7a00 100%);
-    border: 2px solid #ffe066;
-    border-radius: 12px;
+    border: 1.5px solid #ffe066;
+    border-radius: 999px;
     color: #2b0a10;
-    font-weight: 800; font-size: 13px;
-    box-shadow: 0 3px 10px rgba(255,150,0,0.4);
+    font-weight: 800; font-size: 11px;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(255,150,0,0.45);
     cursor: pointer;
     animation: starter-offer-pulse 2.2s ease-in-out infinite;
-    position: relative;
-    z-index: 2;
   }
-  .starter-offer-btn:active { transform: scale(0.97); }
-  .starter-offer-btn .so-burst {
-    font-size: 18px;
-    filter: drop-shadow(0 0 4px rgba(255,255,255,0.7));
-  }
-  .starter-offer-btn .so-label {
-    letter-spacing: 1.2px; font-size: 12px;
-  }
-  .starter-offer-btn .so-content {
-    flex: 1; text-align: center; font-size: 14px; font-weight: 700;
-  }
+  .starter-offer-btn:active { transform: translateX(-50%) scale(0.95); }
+  .starter-offer-btn .so-burst { font-size: 13px; }
+  .starter-offer-btn .so-label { letter-spacing: 1px; font-size: 10px; }
+  .starter-offer-btn .so-content { font-size: 11px; font-weight: 700; }
   .starter-offer-btn .so-price {
     background: #2b0a10; color: #fdc500;
-    padding: 3px 8px; border-radius: 6px; font-size: 12px;
+    padding: 2px 6px; border-radius: 999px; font-size: 10px;
     box-shadow: inset 0 1px 2px rgba(0,0,0,0.5);
   }
   @keyframes starter-offer-pulse {
-    0%, 100% { box-shadow: 0 3px 10px rgba(255,150,0,0.4); }
-    50%      { box-shadow: 0 3px 18px rgba(255,150,0,0.7), 0 0 0 2px rgba(255,220,100,0.3); }
+    0%, 100% { box-shadow: 0 2px 8px rgba(255,150,0,0.45); }
+    50%      { box-shadow: 0 2px 14px rgba(255,150,0,0.75), 0 0 0 2px rgba(255,220,100,0.35); }
   }
 
   /* Full-screen Season Pass modal */
@@ -1675,7 +1679,7 @@
    ========================================================= */
 'use strict';
 
-const MX_VERSION = 'v0.3.58';
+const MX_VERSION = 'v0.3.59';
 const MX = {
   token: '',
   distinctId: null,
@@ -4385,16 +4389,19 @@ function endGame() {
   save();
   submitScore(score);
   setTimeout(() => showGameOverModal(wasBest), 350);
-  // v0.3.57 — first-loss Starter Offer. Fires AFTER the game-over modal
-  // settles (~3s) so the player processes the death first, then the
-  // offer pops. Skipped if user already saw it OR bought it. Single fire
-  // per user lifetime (gated by state.starterOfferShown).
-  if (state.totalGamesEver === 1 && !state.starterOfferShown && !state.starterOfferPurchased) {
+  // v0.3.59 — Starter Offer popup fires AFTER every game-over until
+  // purchased (was previously gated to first loss only via
+  // totalGamesEver===1 + !starterOfferShown). Repeated exposure raises
+  // conversion at the cost of mild annoyance — Pickle's call. A small
+  // per-game cooldown (every 2 losses) keeps it from feeling spammy.
+  const shouldShowOffer = !state.starterOfferPurchased
+    && (state.totalGamesEver % 2 === 1);   // fire on losses #1, 3, 5, 7, ...
+  if (shouldShowOffer) {
     setTimeout(() => {
       // If the game-over modal is still open, close it first
       const shade = document.getElementById('modal-shade');
       if (shade && shade.classList.contains('show')) hideModal();
-      setTimeout(() => openStarterOfferModal('first_loss'), 400);
+      setTimeout(() => openStarterOfferModal('post_loss'), 400);
     }, 3200);
   }
 }

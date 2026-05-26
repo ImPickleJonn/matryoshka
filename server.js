@@ -1266,7 +1266,7 @@ app.get('/api/diag', async (req, res) => {
     if (st.lastActiveAt && (now - st.lastActiveAt) < 7 * 24 * 60 * 60 * 1000) activeLastWeek++;
   }
   const out = {
-    version: 'v0.3.58',
+    version: 'v0.3.59',
     bot_token_configured: !!BOT_TOKEN,
     bot_username: BOT_USERNAME || null,
     public_url: getPublicUrl() || null,
