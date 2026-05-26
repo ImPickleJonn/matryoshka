@@ -87,7 +87,8 @@ const SYNC_FIELDS = [
   // v0.3.57 — starter-offer state. shown=true once user saw the popup,
   // purchased=true once they bought the SKU. Both flags are read by
   // client to decide whether to show the offer button + popup.
-  'starterOfferShown', 'starterOfferPurchased',
+  // v0.3.61 — added starterOfferTier (1..6) for escalating 5-tier chain.
+  'starterOfferShown', 'starterOfferPurchased', 'starterOfferTier',
 ];
 
 function loadLeaderboard() {
@@ -378,16 +379,41 @@ const SKUS = {
   // v0.3.56 — removed all skin SKUs (skin_khokhloma, skin_gzhel,
   // skin_neon, skin_wood). Pickle is redesigning the doll art entirely;
   // the old palette swaps are paused until the new direction lands.
-  // v0.3.57 — first-loss "Starter Offer" special pack. Pops automatically
-  // after a player's first game-over (standard F2P fail-offer pattern)
-  // and is also accessible from a dedicated button on the Play tab.
-  // Hidden across the UI once purchased (server records via the grant
-  // path → client flips starterOfferPurchased=true on success).
+  // v0.3.57 — first-loss "Starter Offer" special pack.
+  // v0.3.61 — escalating 5-tier chain: each purchase advances
+  // starterOfferTier so the NEXT offer (priced higher, bigger contents)
+  // becomes available after the player loses another match. Caps at
+  // tier 6 = "all 5 bought, hide forever". Legacy starterOfferPurchased
+  // flag still set on T1 for back-compat with v0.3.57 saves.
   first_loss_pack: {
-    id: 'first_loss_pack', title: 'Starter Offer · Special',
-    description: '5 Revives + 1 Rainbow Doll — get back in and keep climbing.',
+    id: 'first_loss_pack', title: 'Starter Pack',
+    description: '5 Revives + 1 Rainbow Doll.',
     price: 229, priceUsd: '$2.99',
-    grant: { revives: 5, rainbows: 1, starterOfferPurchased: 1 },
+    grant: { revives: 5, rainbows: 1, starterOfferPurchased: 1, starterOfferTier: 2 },
+  },
+  starter_pack_2: {
+    id: 'starter_pack_2', title: 'Climber Pack',
+    description: '10 Revives + 3 Rainbow Dolls + 5 Hammers.',
+    price: 379, priceUsd: '$4.99',
+    grant: { revives: 10, rainbows: 3, hammers: 5, starterOfferTier: 3 },
+  },
+  starter_pack_3: {
+    id: 'starter_pack_3', title: 'Climber Pack II',
+    description: '15 Revives + 5 Rainbow Dolls + 10 Hammers + 10 Shakes.',
+    price: 619, priceUsd: '$7.99',
+    grant: { revives: 15, rainbows: 5, hammers: 10, shakes: 10, starterOfferTier: 4 },
+  },
+  starter_pack_4: {
+    id: 'starter_pack_4', title: 'Climber Pack III',
+    description: '25 Revives + 10 Rainbows + 15 Hammers + 15 Shakes + 5 Undos.',
+    price: 849, priceUsd: '$10.99',
+    grant: { revives: 25, rainbows: 10, hammers: 15, shakes: 15, undos: 5, starterOfferTier: 5 },
+  },
+  starter_pack_5: {
+    id: 'starter_pack_5', title: 'Climber Pack · ULTIMATE',
+    description: '50 Revives + 20 Rainbows + 25 Hammers + 25 Shakes + 15 Undos + 3,000 Gems.',
+    price: 1149, priceUsd: '$14.99',
+    grant: { revives: 50, rainbows: 20, hammers: 25, shakes: 25, undos: 15, gems: 3000, starterOfferTier: 6 },
   },
   battle_pass: {
     id: 'battle_pass', title: 'Season Pass · 30 Days',
@@ -1266,7 +1292,7 @@ app.get('/api/diag', async (req, res) => {
     if (st.lastActiveAt && (now - st.lastActiveAt) < 7 * 24 * 60 * 60 * 1000) activeLastWeek++;
   }
   const out = {
-    version: 'v0.3.60',
+    version: 'v0.3.61',
     bot_token_configured: !!BOT_TOKEN,
     bot_username: BOT_USERNAME || null,
     public_url: getPublicUrl() || null,

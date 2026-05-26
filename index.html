@@ -1672,7 +1672,7 @@
    ========================================================= */
 'use strict';
 
-const MX_VERSION = 'v0.3.60';
+const MX_VERSION = 'v0.3.61';
 const MX = {
   token: '',
   distinctId: null,
@@ -2467,8 +2467,12 @@ const defaultState = () => ({
   // v0.3.57 — first-loss starter offer ($2.99 = 229⭐). Pops automatically
   // on first game-over (totalGamesEver === 1, shown===false). Always-on
   // Play-tab button stays visible until purchased===true.
+  // v0.3.61 — starterOfferTier (1..6) drives escalating 5-pack chain.
+  // Tier 1 = $2.99 base offer. After each purchase, tier advances to
+  // unlock the next ($4.99 → $7.99 → $10.99 → $14.99). Tier 6 = done.
   starterOfferShown: false,
   starterOfferPurchased: false,
+  starterOfferTier: 1,
 });
 
 let state = defaultState();
@@ -4383,11 +4387,11 @@ function endGame() {
   submitScore(score);
   setTimeout(() => showGameOverModal(wasBest), 350);
   // v0.3.59 — Starter Offer popup fires AFTER every game-over until
-  // purchased (was previously gated to first loss only via
-  // totalGamesEver===1 + !starterOfferShown). Repeated exposure raises
-  // conversion at the cost of mild annoyance — Pickle's call. A small
-  // per-game cooldown (every 2 losses) keeps it from feeling spammy.
-  const shouldShowOffer = !state.starterOfferPurchased
+  // purchased. Cadence = every 2 losses to balance conversion vs annoy.
+  // v0.3.61 — tier-aware. Fires whichever tier is current. Caps out
+  // once all 5 tiers (T1..T5) have been bought (currentStarterTier()
+  // returns 6 = "done, no more offers").
+  const shouldShowOffer = currentStarterTier() <= 5
     && (state.totalGamesEver % 2 === 1);   // fire on losses #1, 3, 5, 7, ...
   if (shouldShowOffer) {
     setTimeout(() => {
@@ -4522,37 +4526,115 @@ function showGameOverModal(wasBest) {
   }
 }
 
-// v0.3.57 — Starter Offer modal. Standard F2P first-loss "special pack"
-// pattern: $2.99 in Stars for 5 Revives + 1 Rainbow. Shown automatically
-// after a player's first game-over, and also reachable any time from the
-// always-on Play-tab button until purchased. Once purchased, both
-// surfaces hide permanently (state.starterOfferPurchased=true via grant).
-function openStarterOfferModal() {
+// v0.3.61 — Escalating 5-tier Starter Pack chain. After buying tier N,
+// state.starterOfferTier advances to N+1 (server grant). Next loss
+// triggers the new tier's popup. Always-on Play-tab star button shows
+// whichever tier is current. After tier 5 (ULTIMATE), tier === 6 hides
+// everything permanently.
+const STARTER_OFFER_TIERS = {
+  1: {
+    sku: 'first_loss_pack',
+    title: 'Starter Pack',
+    stars: 229, usd: '$2.99',
+    tag: '',                            // no upsell tag
+    items: [
+      { icon: '❤️', amount: '×5',  label: 'Revives',      desc: 'Clear half the jar, keep playing' },
+      { icon: '🌈', amount: '×1',  label: 'Rainbow Doll', desc: 'Merges with ANY size' },
+    ],
+  },
+  2: {
+    sku: 'starter_pack_2',
+    title: 'Climber Pack',
+    stars: 379, usd: '$4.99',
+    tag: '⚡ 2× THE VALUE',
+    items: [
+      { icon: '❤️', amount: '×10', label: 'Revives',       desc: 'Twice the comebacks' },
+      { icon: '🌈', amount: '×3',  label: 'Rainbow Dolls', desc: 'Wildcard merges' },
+      { icon: '🔨', amount: '×5',  label: 'Hammers',       desc: 'Tap any doll to remove it' },
+    ],
+  },
+  3: {
+    sku: 'starter_pack_3',
+    title: 'Climber Pack II',
+    stars: 619, usd: '$7.99',
+    tag: '🔥 BIGGER HAUL',
+    items: [
+      { icon: '❤️', amount: '×15', label: 'Revives' },
+      { icon: '🌈', amount: '×5',  label: 'Rainbow Dolls' },
+      { icon: '🔨', amount: '×10', label: 'Hammers' },
+      { icon: '🌀', amount: '×10', label: 'Shakes',  desc: 'Jostle the whole jar' },
+    ],
+  },
+  4: {
+    sku: 'starter_pack_4',
+    title: 'Climber Pack III',
+    stars: 849, usd: '$10.99',
+    tag: '👑 ELITE PACK',
+    items: [
+      { icon: '❤️', amount: '×25', label: 'Revives' },
+      { icon: '🌈', amount: '×10', label: 'Rainbow Dolls' },
+      { icon: '🔨', amount: '×15', label: 'Hammers' },
+      { icon: '🌀', amount: '×15', label: 'Shakes' },
+      { icon: '↶',  amount: '×5',  label: 'Undos',   desc: 'Take back your last drop' },
+    ],
+  },
+  5: {
+    sku: 'starter_pack_5',
+    title: 'Climber Pack · ULTIMATE',
+    stars: 1149, usd: '$14.99',
+    tag: '🌟 FINAL TIER · BEST VALUE',
+    items: [
+      { icon: '❤️', amount: '×50', label: 'Revives' },
+      { icon: '🌈', amount: '×20', label: 'Rainbow Dolls' },
+      { icon: '🔨', amount: '×25', label: 'Hammers' },
+      { icon: '🌀', amount: '×25', label: 'Shakes' },
+      { icon: '↶',  amount: '×15', label: 'Undos' },
+      { icon: '💎', amount: '×3,000', label: 'Gems', desc: 'Massive gem injection' },
+    ],
+  },
+};
+
+// Reads tier from state with backward-compat: pre-v0.3.61 saves that
+// have starterOfferPurchased=true but no starterOfferTier are migrated
+// to tier 2 (they bought T1, so T2 is the next offer).
+function currentStarterTier() {
+  let tier = state.starterOfferTier;
+  if (!tier) tier = state.starterOfferPurchased ? 2 : 1;
+  return Math.max(1, Math.min(6, tier));
+}
+
+function openStarterOfferModal(trigger) {
+  const tier = currentStarterTier();
+  if (tier > 5) return;   // chain exhausted; user bought all 5
+  const offer = STARTER_OFFER_TIERS[tier];
+  const itemsHtml = offer.items.map(it => `
+    <div style="display:flex;align-items:center;gap:10px;justify-content:flex-start;padding:6px 0;border-top:1px dashed rgba(120,80,0,0.15)">
+      <span style="font-size:24px;width:32px;text-align:center">${it.icon}</span>
+      <div style="font-weight:800;font-size:16px;color:#2a1810;min-width:70px">${it.amount}</div>
+      <div style="flex:1;text-align:left">
+        <div style="font-weight:700;font-size:14px;color:#2a1810">${it.label}</div>
+        ${it.desc ? `<div style="font-size:11px;color:#7a5520">${it.desc}</div>` : ''}
+      </div>
+    </div>
+  `).join('');
+  const tagHtml = offer.tag
+    ? `<div style="display:inline-block;background:linear-gradient(135deg,#f72585,#9b5de5);color:#fff;font-size:11px;font-weight:800;letter-spacing:1.4px;padding:3px 10px;border-radius:999px;margin-bottom:6px">${offer.tag}</div>`
+    : '';
+  const tierDot = (n) => `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${n <= tier ? '#fdc500' : 'rgba(200,180,140,0.4)'};margin:0 2px"></span>`;
+  const tierProgress = `<div style="margin-top:4px;font-size:10px;color:var(--ink-soft);letter-spacing:1px">TIER ${tier} OF 5  ${[1,2,3,4,5].map(tierDot).join('')}</div>`;
   const body = document.getElementById('modal-body');
   body.innerHTML = `
     <div style="text-align:center;padding:8px 4px 4px">
       <div style="font-size:14px;font-weight:800;color:var(--gold-deep);letter-spacing:2px;margin-bottom:6px">⭐ SPECIAL OFFER ⭐</div>
-      <h3 style="margin:0 0 4px;font-size:22px">Starter Pack</h3>
-      <div style="color:var(--ink-soft);font-size:13px;margin-bottom:12px">Get back in. Climb harder.</div>
-      <div style="background:linear-gradient(135deg,#fff5dc,#ffe6ad);border:2px solid var(--gold-deep);border-radius:14px;padding:14px;margin:6px 0 14px;box-shadow:0 4px 12px rgba(200,150,0,0.25)">
-        <div style="display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:8px">
-          <span style="font-size:26px">❤️</span>
-          <div style="text-align:left">
-            <div style="font-weight:800;font-size:17px;color:#2a1810">×5 Revives</div>
-            <div style="font-size:12px;color:#7a5520">Clear half the jar, keep playing</div>
-          </div>
-        </div>
-        <div style="display:flex;align-items:center;gap:10px;justify-content:center">
-          <span style="font-size:26px">🌈</span>
-          <div style="text-align:left">
-            <div style="font-weight:800;font-size:17px;color:#2a1810">×1 Rainbow Doll</div>
-            <div style="font-size:12px;color:#7a5520">Merges with ANY size</div>
-          </div>
-        </div>
+      ${tagHtml}
+      <h3 style="margin:0 0 4px;font-size:22px">${offer.title}</h3>
+      ${tierProgress}
+      <div style="background:linear-gradient(135deg,#fff5dc,#ffe6ad);border:2px solid var(--gold-deep);border-radius:14px;padding:12px;margin:10px 0 14px;box-shadow:0 4px 12px rgba(200,150,0,0.25)">
+        ${itemsHtml}
       </div>
     </div>
     <div class="modal-btns">
-      <button class="btn revive" id="m-starter-buy" style="font-size:18px;padding:14px;background:linear-gradient(135deg,#1ec850,#0d8a30)">⭐ Get for 229 Stars (~$2.99)</button>
+      <button class="btn revive" id="m-starter-buy" style="font-size:17px;padding:14px;background:linear-gradient(135deg,#1ec850,#0d8a30)">⭐ Get for ${offer.stars} Stars (~${offer.usd})</button>
       <button class="btn ghost" id="m-starter-close">No thanks</button>
     </div>
   `;
@@ -4561,17 +4643,18 @@ function openStarterOfferModal() {
   save();
   if (typeof MX !== 'undefined' && MX.ready) {
     MX.track('Starter Offer Shown', {
-      trigger: arguments[0] || 'button',
+      trigger: trigger || 'button',
+      tier, sku: offer.sku, stars: offer.stars,
       total_games_ever: state.totalGamesEver || 0,
     });
   }
   document.getElementById('m-starter-buy').onclick = () => {
-    if (typeof MX !== 'undefined' && MX.ready) MX.track('Starter Offer Buy Tapped');
+    if (typeof MX !== 'undefined' && MX.ready) MX.track('Starter Offer Buy Tapped', { tier, sku: offer.sku });
     hideModal();
-    buySku('first_loss_pack');
+    buySku(offer.sku);
   };
   document.getElementById('m-starter-close').onclick = () => {
-    if (typeof MX !== 'undefined' && MX.ready) MX.track('Starter Offer Dismissed');
+    if (typeof MX !== 'undefined' && MX.ready) MX.track('Starter Offer Dismissed', { tier });
     hideModal();
   };
 }
@@ -4783,9 +4866,11 @@ function hudUpdate() {
     }
   }
   document.getElementById('streak-count').textContent = state.streak || 0;
-  // v0.3.57 — Starter Offer button visibility. Hidden once purchased.
+  // v0.3.57 — Starter Offer button visibility.
+  // v0.3.61 — visibility now driven by tier chain: hide only after all
+  // 5 tiers purchased (currentStarterTier() returns 6).
   const soBtn = document.getElementById('starter-offer-btn');
-  if (soBtn) soBtn.style.display = state.starterOfferPurchased ? 'none' : 'flex';
+  if (soBtn) soBtn.style.display = (currentStarterTier() > 5) ? 'none' : 'inline-flex';
   document.getElementById('best-score').textContent = state.mode === 'daily'
     ? (state.dailyYMD === dailyYMD ? (state.dailyBestToday || 0) : 0)
     : (state.best || 0);
@@ -5095,14 +5180,22 @@ function applyGrant(g) {
   if (g.shieldDays) state.shieldDays = (state.shieldDays || 0) + g.shieldDays;
   if (g.skins) { state.skins = Array.from(new Set([...(state.skins || []), ...g.skins])); }
   if (g.battlePass) state.battlePassUntil = Date.now() + g.battlePass * 86400000;
-  // v0.3.57 — first-loss starter offer purchase marker. Flips the Play-tab
-  // button + game-over popup off permanently for this user.
+  // v0.3.57 — first-loss starter offer purchase marker (legacy, kept
+  // for back-compat with old saves before the tier system).
   if (g.starterOfferPurchased) {
     state.starterOfferPurchased = true;
-    state.starterOfferShown = true;   // belt-and-suspenders
-    const btn = document.getElementById('starter-offer-btn');
-    if (btn) btn.style.display = 'none';
+    state.starterOfferShown = true;
   }
+  // v0.3.61 — escalating tier chain. Each pack grants the next tier
+  // number. After tier 5 is bought, the SKU grants tier:6 which makes
+  // currentStarterTier() > 5 and hides everything permanently.
+  if (g.starterOfferTier) {
+    state.starterOfferTier = Math.max(state.starterOfferTier || 1, g.starterOfferTier);
+    state.starterOfferShown = false;   // reset so next loss re-pops the NEW tier
+  }
+  // Hide button if no more offers in the chain
+  const btn = document.getElementById('starter-offer-btn');
+  if (btn) btn.style.display = (currentStarterTier() > 5) ? 'none' : 'inline-flex';
   if (g.seasonPremium) {
     ensureSeasonFresh();
     state.season.premium = true;
