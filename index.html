@@ -1675,7 +1675,7 @@
    ========================================================= */
 'use strict';
 
-const MX_VERSION = 'v0.3.57';
+const MX_VERSION = 'v0.3.58';
 const MX = {
   token: '',
   distinctId: null,
@@ -2427,7 +2427,14 @@ const defaultState = () => ({
   // v0.3.42 — bumped from 100 → 300 so brand-new players have enough
   // gem balance to actually feel the gem-shop SKUs (cheapest booster is
   // 60 gems, so 300 = 5 bookkeeping freebies before they need to earn).
-  gems: 300,
+  // v0.3.58 — lowered to 50 for new users. SAFE FOR EXISTING USERS:
+  // load() does Object.assign(defaultState(), parsed) so saved gems
+  // override this default; serverStateLoad() then layers actual server
+  // state on top. Only brand-new users (no localStorage AND no server
+  // entry) ever see this default. Verified: Object.assign source-wins
+  // semantics + explicit overwrite in serverStateLoad protect everyone
+  // who has ever played a game.
+  gems: 50,
   revives: 1,
   undos: 2,
   previews: 0,
