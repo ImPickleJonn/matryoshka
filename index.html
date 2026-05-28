@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
 <meta name="theme-color" content="#a51d30" />
-<title>Matryoshka · Drop & Merge</title>
+<title>Matryoshka Drop</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   /* =========================================================
@@ -1672,7 +1672,7 @@
    ========================================================= */
 'use strict';
 
-const MX_VERSION = 'v0.3.63';
+const MX_VERSION = 'v0.3.65';
 const MX = {
   token: '',
   distinctId: null,
@@ -6394,7 +6394,9 @@ async function generateShareCard(finalScore, bestTier) {
   cc.fillText('🪆 MATRYOSHKA', 400, 92);
   cc.font = 'bold 22px -apple-system, system-ui, sans-serif';
   cc.fillStyle = '#ffe6c2';
-  cc.fillText(state.mode === 'daily' ? '🌅 Daily Challenge' : 'Drop & Merge', 400, 124);
+  // v0.3.65 — share-card subtitle re-branded to match new bot/channel
+  // name "Matryoshka Drop".
+  cc.fillText(state.mode === 'daily' ? '🌅 Daily Challenge' : 'Matryoshka Drop', 400, 124);
 
   // ----- Game-box snapshot -----
   // JAR is in canvas (game) coords. We scale it up + center it into
