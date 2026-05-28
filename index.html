@@ -1672,7 +1672,7 @@
    ========================================================= */
 'use strict';
 
-const MX_VERSION = 'v0.3.62';
+const MX_VERSION = 'v0.3.63';
 const MX = {
   token: '',
   distinctId: null,
@@ -6684,6 +6684,14 @@ document.getElementById('btn-settings').onclick = () => {
       ${isAdmin ? `<button class="btn ghost" id="m-wipe-self" style="border:2px dashed #c91833;color:#c91833">⚠️ ADMIN: Delete MY progress</button>` : ''}
       <button class="btn ghost" id="m-close">Close</button>
     </div>
+    <!-- v0.3.63 — legal footer. Opens privacy.html / terms.html in an
+         in-Telegram browser via tg.openLink so the user can return to the
+         Mini App with one tap. -->
+    <div style="text-align:center;margin-top:12px;padding-top:8px;border-top:1px solid rgba(120,80,0,0.18);font-size:11px;color:var(--ink-soft);letter-spacing:0.4px">
+      <a href="javascript:void(0)" id="m-privacy" style="color:var(--ink-soft);text-decoration:underline">Privacy Policy</a>
+      <span style="opacity:0.5;margin:0 8px">·</span>
+      <a href="javascript:void(0)" id="m-terms" style="color:var(--ink-soft);text-decoration:underline">Terms of Service</a>
+    </div>
   `;
   document.getElementById('modal-shade').classList.add('show');
   renderLangPicker(document.getElementById('lang-picker'));
@@ -6746,6 +6754,22 @@ document.getElementById('btn-settings').onclick = () => {
     };
   }
   document.getElementById('m-close').onclick = hideModal;
+  // v0.3.63 — Privacy + ToS links. Use tg.openLink so they open in
+  // Telegram's in-app browser (one tap to return) rather than punting
+  // out to the OS browser. Falls back to window.open if outside TG.
+  const openLegal = (url) => {
+    try {
+      if (tg && tg.openLink) tg.openLink(url);
+      else window.open(url, '_blank');
+    } catch (e) { window.open(url, '_blank'); }
+  };
+  // Use absolute URL (tg.openLink wants a full https:// URL — relative
+  // paths get rejected on iOS). location.origin gives us the current
+  // Mini App host, which serves /privacy.html and /terms.html.
+  document.getElementById('m-privacy').onclick = () =>
+    openLegal(window.location.origin + '/privacy.html');
+  document.getElementById('m-terms').onclick = () =>
+    openLegal(window.location.origin + '/terms.html');
 };
 
 function hideModal() {
