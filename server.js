@@ -1202,6 +1202,64 @@ app.post('/api/telegram-webhook', async (req, res) => {
       rememberUser(m.from.id, { chatId: m.chat.id, lang, lastActiveAt: Date.now() });
       const first = (m.from && (m.from.first_name || m.from.username)) || 'there';
       await sendWelcome(m.chat.id, first, lang);
+    } else if (update.message && update.message.text === '/play') {
+      // v0.3.64 — /play : direct Play button reply. Required by Telegram
+      // ad policy "Destination functionality" (commands must respond).
+      const m = update.message;
+      const lang = (m.from && m.from.language_code) || 'en';
+      rememberUser(m.from.id, { chatId: m.chat.id, lang, lastActiveAt: Date.now() });
+      const isRu = String(lang || '').startsWith('ru');
+      const text = isRu
+        ? 'Жми на кнопку ниже, чтобы открыть игру.'
+        : 'Tap the button below to open the game.';
+      const btnText = isRu ? 'И Г Р А Т Ь' : 'P L A Y';
+      try {
+        await fetch(`${TELEGRAM_API}/sendMessage`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: m.chat.id, text,
+            reply_markup: { inline_keyboard: [[
+              { text: btnText, web_app: { url: buildPlayUrl({ source: 'cmd', medium: 'telegram_bot', campaign: 'play_cmd' }) } }
+            ]] }
+          }),
+        });
+      } catch (e) {}
+    } else if (update.message && update.message.text === '/help') {
+      // v0.3.64 — /help : plain text overview of how the game works.
+      const m = update.message;
+      const lang = (m.from && m.from.language_code) || 'en';
+      rememberUser(m.from.id, { chatId: m.chat.id, lang, lastActiveAt: Date.now() });
+      const isRu = String(lang || '').startsWith('ru');
+      const text = isRu
+        ? 'Как играть:\n\n1. Бросай матрёшек в баночку.\n2. Две одинаковые соединяются в следующий размер.\n3. Не давай матрёшкам подняться выше красной линии.\n4. Доберись до Царицы — самой большой.\n\nЕсть ежедневный челлендж и недельный турнир с призами. Power Hour — каждый вечер в 18:00 UTC с двойными наградами.\n\nОплата только через Telegram Stars. Рекламы нет.'
+        : 'How to play:\n\n1. Drop dolls into the jar.\n2. Two same-size dolls combine into the next size up.\n3. Keep dolls below the red line.\n4. Climb 11 tiers and reach the Tsaritsa.\n\nA daily challenge and a weekly tournament with prizes are included. Power Hour runs every evening at 18:00 UTC with double rewards.\n\nPayments use Telegram Stars only. No advertisements.';
+      try {
+        await fetch(`${TELEGRAM_API}/sendMessage`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chat_id: m.chat.id, text }),
+        });
+      } catch (e) {}
+    } else if (update.message && update.message.text === '/community') {
+      // v0.3.64 — /community : direct link to the news channel.
+      const m = update.message;
+      const lang = (m.from && m.from.language_code) || 'en';
+      rememberUser(m.from.id, { chatId: m.chat.id, lang, lastActiveAt: Date.now() });
+      const isRu = String(lang || '').startsWith('ru');
+      const text = isRu
+        ? 'Подпишись на новостной канал, чтобы узнавать о турнирах, событиях и обновлениях.'
+        : 'Join the news channel for tournaments, events, and updates.';
+      const btnText = isRu ? 'Открыть канал' : 'Open channel';
+      try {
+        await fetch(`${TELEGRAM_API}/sendMessage`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: m.chat.id, text,
+            reply_markup: { inline_keyboard: [[
+              { text: btnText, url: 'https://t.me/MatryoshkaMerge' }
+            ]] }
+          }),
+        });
+      } catch (e) {}
     }
   } catch (e) {}
   res.json({ ok: true });
@@ -1295,7 +1353,7 @@ app.get('/api/diag', async (req, res) => {
     if (st.lastActiveAt && (now - st.lastActiveAt) < 7 * 24 * 60 * 60 * 1000) activeLastWeek++;
   }
   const out = {
-    version: 'v0.3.62',
+    version: 'v0.3.64',
     bot_token_configured: !!BOT_TOKEN,
     bot_username: BOT_USERNAME || null,
     public_url: getPublicUrl() || null,
